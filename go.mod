@@ -17,7 +17,7 @@ require (
 	github.com/imkira/go-interpol v1.1.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/k0kubun/colorstring v0.0.0-20150214042306-9440f1994b88 // indirect
-	github.com/lib/pq v1.2.0
+	github.com/lib/pq v1.10.3
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/mholt/certmagic v0.8.1-0.20191019173955-6f9f0e6dd0e8
