@@ -3,7 +3,7 @@ module github.com/joohoi/acme-dns
 go 1.13
 
 require (
-	github.com/BurntSushi/toml v0.3.1
+	github.com/BurntSushi/toml v0.4.1
 	github.com/DATA-DOG/go-sqlmock v1.3.3
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
