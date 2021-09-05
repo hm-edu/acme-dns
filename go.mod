@@ -21,7 +21,7 @@ require (
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-sqlite3 v1.11.0
 	github.com/mholt/certmagic v0.8.1-0.20191019173955-6f9f0e6dd0e8
-	github.com/miekg/dns v1.1.22
+	github.com/miekg/dns v1.1.25
 	github.com/moul/http2curl v1.0.0 // indirect
 	github.com/rs/cors v1.7.0
 	github.com/sergi/go-diff v1.0.0 // indirect
