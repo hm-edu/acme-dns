@@ -12,7 +12,7 @@ require (
 	github.com/gavv/httpexpect v2.0.0+incompatible
 	github.com/go-acme/lego v2.7.2+incompatible
 	github.com/go-acme/lego/v3 v3.1.0
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.3.0
 	github.com/gorilla/websocket v1.4.1 // indirect
 	github.com/imkira/go-interpol v1.1.0 // indirect
 	github.com/julienschmidt/httprouter v1.3.0
