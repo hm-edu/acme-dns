@@ -58,8 +58,8 @@ github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc/go.mod h1:paBWMcWSl3LHKBqUq+rly7CNSldXjb2rDl3JlRe0mD8=
-github.com/caddyserver/certmagic v0.14.5 h1:y4HcFzLLBMsTv8sSlAPj5K55mvntX8e8ExcmB/lhO6w=
-github.com/caddyserver/certmagic v0.14.5/go.mod h1:/0VQ5og2Jxa5yBQ8eT80wWS7fi/DgNy1uXeXRUJ1Wj0=
+github.com/caddyserver/certmagic v0.15.0 h1:UZBNGcr/3wWLP+3k//rfrsrMWAa7J0u7MBnhLd3lZa0=
+github.com/caddyserver/certmagic v0.15.0/go.mod h1:/0VQ5og2Jxa5yBQ8eT80wWS7fi/DgNy1uXeXRUJ1Wj0=
 github.com/cenkalti/backoff/v4 v4.0.0/go.mod h1:eEew/i+1Q6OrCDZh3WiXYv3+nJwBASZ8Bog/87DQnVg=
 github.com/census-instrumentation/opencensus-proto v0.2.0/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
