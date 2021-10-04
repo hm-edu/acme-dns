@@ -1,8 +1,10 @@
-//+build !test
+//go:build !test
+// +build !test
 
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	stdlog "log"
@@ -162,7 +164,7 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 		myACME.CA = certmagic.LetsEncryptProductionCA
 	}
 	magic.Issuers = []certmagic.Issuer{myACME}
-	err := magic.ManageSync([]string{Config.General.Domain})
+	err := magic.ManageSync(context.Background(), []string{Config.General.Domain})
 	if err != nil {
 		errChan <- err
 		return
