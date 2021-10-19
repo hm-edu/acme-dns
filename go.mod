@@ -24,7 +24,7 @@ require (
 	github.com/lib/pq v1.10.3
 	github.com/libdns/libdns v0.2.1
 	github.com/mattn/go-colorable v0.1.8 // indirect
-	github.com/mattn/go-sqlite3 v1.14.8
+	github.com/mattn/go-sqlite3 v1.14.9
 	github.com/mholt/acmez v1.0.0 // indirect
 	github.com/miekg/dns v1.1.43
 	github.com/moul/http2curl v1.0.0 // indirect
