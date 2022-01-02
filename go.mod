@@ -14,7 +14,7 @@ require (
 	github.com/lib/pq v1.10.3
 	github.com/libdns/libdns v0.2.1
 	github.com/mattn/go-sqlite3 v1.14.9
-	github.com/miekg/dns v1.1.43
+	github.com/miekg/dns v1.1.45
 	github.com/rs/cors v1.8.0
 	github.com/sirupsen/logrus v1.8.1
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
@@ -49,8 +49,11 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.17.0 // indirect
-	golang.org/x/net v0.0.0-20210525063256-abc453219eb5 // indirect
-	golang.org/x/sys v0.0.0-20210615035016-665e8c7367d1 // indirect
+	golang.org/x/mod v0.4.2 // indirect
+	golang.org/x/net v0.0.0-20210726213435-c6fcb2dbf985 // indirect
+	golang.org/x/sys v0.0.0-20210630005230-0f9fa26af87c // indirect
 	golang.org/x/text v0.3.6 // indirect
+	golang.org/x/tools v0.1.6-0.20210726203631-07bc1bf47fb2 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
