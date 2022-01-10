@@ -159,28 +159,20 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 		// plus any other customizations you need
 	})
 
-	switch Config.API.TLS {
-	case "letsencrypt":
+	if Config.API.TLS == "letsencrypt" {
 		myACME.CA = certmagic.LetsEncryptProductionCA
 	}
-	magic.Issuers = []certmagic.Issuer{myACME}
-	err := magic.ManageSync(context.Background(), []string{Config.General.Domain})
-	if err != nil {
-		errChan <- err
-		return
-	}
+
+	var err error
 	switch Config.API.TLS {
 	case "letsencryptstaging":
-		cfg.GetCertificate = magic.GetCertificate
-		srv := &http.Server{
-			Addr:      host,
-			Handler:   c.Handler(api),
-			TLSConfig: cfg,
-			ErrorLog:  stdlog.New(logwriter, "", 0),
-		}
-		log.WithFields(log.Fields{"host": host, "domain": Config.General.Domain}).Info("Listening HTTPS")
-		err = srv.ListenAndServeTLS("", "")
 	case "letsencrypt":
+		magic.Issuers = []certmagic.Issuer{myACME}
+		err = magic.ManageSync(context.Background(), []string{Config.General.Domain})
+		if err != nil {
+			errChan <- err
+			return
+		}
 		cfg.GetCertificate = magic.GetCertificate
 		srv := &http.Server{
 			Addr:      host,
