@@ -68,7 +68,6 @@ func TestMain(m *testing.M) {
 func TestAcme(t *testing.T) {
 	newDb := new(acmedb)
 
-	Config.Database.Engine = "sqlite3"
 	_ = newDb.Init("sqlite3", ":memory:")
 
 	DB = newDb
