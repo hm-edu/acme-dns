@@ -3,12 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	logrustest "github.com/sirupsen/logrus/hooks/test"
 	"io/ioutil"
 	"os"
 	"sync"
 	"testing"
+
+	"github.com/caddyserver/certmagic"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
+
+	"github.com/stretchr/testify/assert"
 )
 
 var loghook = new(logrustest.Hook)
@@ -59,6 +63,27 @@ func TestMain(m *testing.M) {
 	_ = dnsserver.Server.Shutdown()
 	DB.Close()
 	os.Exit(exitval)
+}
+
+func TestAcme(t *testing.T) {
+	setupTestLogger()
+	setupConfig()
+
+	newDb := new(acmedb)
+
+	Config.Database.Engine = "sqlite3"
+	_ = newDb.Init("sqlite3", ":memory:")
+
+	DB = newDb
+	dnsserver = NewDNSServer(DB, Config.General.Listen, Config.General.Proto, Config.General.Domain)
+	dnsserver.ParseRecords(Config)
+	servers := []*DNSServer{dnsserver}
+	magic := setupAcme(servers)
+	assert.Len(t, magic.Issuers, 1)
+
+	if manager, ok := magic.Issuers[0].(*certmagic.ACMEManager); ok {
+		assert.Equal(t, manager.CA, certmagic.LetsEncryptStagingCA)
+	}
 }
 
 func setupConfig() {

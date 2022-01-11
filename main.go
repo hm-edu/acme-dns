@@ -136,38 +136,12 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 		MinVersion: tls.VersionTLS12,
 	}
 
-	provider := NewChallengeProvider(dnsservers)
-	// Override the validation options to mitigate issues with (lack of) 1:1 nat reflection
-	// for some network setups.
-	storage := certmagic.FileStorage{Path: Config.API.ACMECacheDir}
-	cache := certmagic.NewCache(certmagic.CacheOptions{
-		GetConfigForCert: func(cert certmagic.Certificate) (*certmagic.Config, error) {
-			return &certmagic.Config{
-				DefaultServerName: Config.General.Domain,
-				Storage:           &storage}, nil
-		},
-	})
-	magic := certmagic.New(cache, certmagic.Config{})
-
-	myACME := certmagic.NewACMEManager(magic, certmagic.ACMEManager{
-		CA:                      certmagic.LetsEncryptStagingCA,
-		Email:                   Config.API.NotificationEmail,
-		Agreed:                  true,
-		DNS01Solver:             &certmagic.DNS01Solver{DNSProvider: &provider},
-		DisableHTTPChallenge:    true,
-		DisableTLSALPNChallenge: true,
-		// plus any other customizations you need
-	})
-
-	if Config.API.TLS == "letsencrypt" {
-		myACME.CA = certmagic.LetsEncryptProductionCA
-	}
-
 	var err error
 	switch Config.API.TLS {
-	case "letsencryptstaging":
-	case "letsencrypt":
-		magic.Issuers = []certmagic.Issuer{myACME}
+	case "letsencryptstaging", "letsencrypt":
+
+		magic := setupAcme(dnsservers)
+
 		err = magic.ManageSync(context.Background(), []string{Config.General.Domain})
 		if err != nil {
 			errChan <- err
@@ -198,4 +172,35 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 	if err != nil {
 		errChan <- err
 	}
+}
+
+func setupAcme(dnsservers []*DNSServer) *certmagic.Config {
+	ca := certmagic.LetsEncryptStagingCA
+
+	if Config.API.TLS == "letsencrypt" {
+		ca = certmagic.LetsEncryptProductionCA
+	}
+
+	provider := NewChallengeProvider(dnsservers)
+
+	storage := certmagic.FileStorage{Path: Config.API.ACMECacheDir}
+	cache := certmagic.NewCache(certmagic.CacheOptions{
+		GetConfigForCert: func(cert certmagic.Certificate) (*certmagic.Config, error) {
+			return &certmagic.Config{
+				DefaultServerName: Config.General.Domain,
+				Storage:           &storage}, nil
+		},
+	})
+	magic := certmagic.New(cache, certmagic.Config{})
+	acme := certmagic.NewACMEManager(magic, certmagic.ACMEManager{
+		CA:                      ca,
+		Email:                   Config.API.NotificationEmail,
+		Agreed:                  true,
+		DNS01Solver:             &certmagic.DNS01Solver{DNSProvider: &provider},
+		DisableHTTPChallenge:    true,
+		DisableTLSALPNChallenge: true,
+	})
+
+	magic.Issuers = []certmagic.Issuer{acme}
+	return magic
 }
