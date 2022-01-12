@@ -3,7 +3,7 @@ module github.com/joohoi/acme-dns
 go 1.17
 
 require (
-	github.com/BurntSushi/toml v0.4.1
+	github.com/BurntSushi/toml v1.0.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/caddyserver/certmagic v0.15.2
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
@@ -17,6 +17,7 @@ require (
 	github.com/miekg/dns v1.1.45
 	github.com/rs/cors v1.8.2
 	github.com/sirupsen/logrus v1.8.1
+	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
 )
 
@@ -36,7 +37,6 @@ require (
 	github.com/moul/http2curl v1.0.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.29.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
