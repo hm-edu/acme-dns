@@ -77,7 +77,7 @@ func TestAcme(t *testing.T) {
 	magic := setupAcme(servers)
 	assert.Len(t, magic.Issuers, 1)
 
-	if manager, ok := magic.Issuers[0].(*certmagic.ACMEManager); ok {
+	if manager, ok := magic.Issuers[0].(*certmagic.ACMEIssuer); ok {
 		assert.Equal(t, manager.CA, certmagic.LetsEncryptStagingCA)
 	}
 }

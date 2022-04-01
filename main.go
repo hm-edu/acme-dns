@@ -192,7 +192,7 @@ func setupAcme(dnsservers []*DNSServer) *certmagic.Config {
 		},
 	})
 	magic := certmagic.New(cache, certmagic.Config{})
-	acme := certmagic.NewACMEManager(magic, certmagic.ACMEManager{
+	acme := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		CA:                      ca,
 		Email:                   Config.API.NotificationEmail,
 		Agreed:                  true,
