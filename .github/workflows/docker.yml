@@ -1,6 +1,7 @@
 name: docker
 
 on:
+  pull_request:
   push:
     tags:
       - "*"
@@ -10,7 +11,7 @@ env:
   IMAGE_NAME: ${{ github.repository }}
     
 jobs:
-  goreleaser:
+  docker:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -37,6 +38,6 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          push: true
+          push: ${{ github.event_name != "pull_request" }} # Never push on pull-request
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
