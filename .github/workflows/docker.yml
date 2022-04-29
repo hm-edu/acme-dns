@@ -38,6 +38,6 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           context: .
-          push: ${{ github.event_name != "pull_request" }} # Never push on pull-request
+          push: ${{ github.event_name != 'pull_request' }} # Never push on pull-request
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
