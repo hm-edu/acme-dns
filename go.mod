@@ -3,7 +3,7 @@ module github.com/joohoi/acme-dns
 go 1.17
 
 require (
-	github.com/BurntSushi/toml v1.2.0
+	github.com/BurntSushi/toml v1.3.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/caddyserver/certmagic v0.17.2
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
