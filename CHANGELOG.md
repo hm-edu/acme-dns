@@ -1,5 +1,6 @@
 # Changelog
-
+- v0.10:
+  - Switched to go 1.20
 - v0.9.1:
   - Switched to codecov and publish docker images on github
 - v0.9:

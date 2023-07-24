@@ -12,10 +12,6 @@ builds:
     goos:
       - linux
       - darwin
-archives:
-  - replacements:
-      darwin: Darwin
-      linux: Linux
 checksum:
   name_template: 'checksums.txt'
 snapshot:
