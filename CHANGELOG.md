@@ -1,5 +1,10 @@
 # Changelog
-
+- v0.12:
+  - Switched to go 1.21
+- v0.11:
+  - Bump libs
+- v0.10:
+  - Switched to go 1.20
 - v0.9.1:
   - Switched to codecov and publish docker images on github
 - v0.9:

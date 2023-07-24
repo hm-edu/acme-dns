@@ -3,11 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
+	"io"
+	"net/http"
 )
 
 // RegResponse is a struct for registration response JSON
@@ -24,7 +23,7 @@ func webRegisterPost(w http.ResponseWriter, r *http.Request, _ httprouter.Params
 	var reg []byte
 	var err error
 	aTXT := ACMETxt{}
-	bdata, _ := ioutil.ReadAll(r.Body)
+	bdata, _ := io.ReadAll(r.Body)
 	if len(bdata) > 0 {
 		err = json.Unmarshal(bdata, &aTXT)
 		if err != nil {

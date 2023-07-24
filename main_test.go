@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"sync"
 	"testing"
@@ -117,7 +117,7 @@ func setupConfig() {
 }
 
 func setupTestLogger() {
-	log.SetOutput(ioutil.Discard)
+	log.SetOutput(io.Discard)
 	log.AddHook(loghook)
 }
 
