@@ -15,7 +15,7 @@ require (
 	github.com/libdns/libdns v0.2.1
 	github.com/mattn/go-sqlite3 v1.14.17
 	github.com/miekg/dns v1.1.56
-	github.com/rs/cors v1.10.0
+	github.com/rs/cors v1.10.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	golang.org/x/crypto v0.13.0
