@@ -1,4 +1,6 @@
 # Changelog
+- v0.11:
+  - Switched to go 1.21
 - v0.10:
   - Switched to go 1.20
 - v0.9.1:
