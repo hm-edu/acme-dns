@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/BurntSushi/toml v1.3.2
-	github.com/DATA-DOG/go-sqlmock v1.5.1
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caddyserver/certmagic v0.20.0
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
 	github.com/gavv/httpexpect v2.0.0+incompatible
