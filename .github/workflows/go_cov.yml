@@ -22,5 +22,5 @@ jobs:
       - name: Test
         run: go test -v -race -covermode=atomic -coverprofile=coverage.txt
 
-      - name: Upload coverage to Codecov
-        run: bash <(curl -s https://codecov.io/bash)
+#      - name: Upload coverage to Codecov
+#        run: bash <(curl -s https://codecov.io/bash)
