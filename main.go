@@ -192,12 +192,13 @@ func setupAcme(dnsservers []*DNSServer) *certmagic.Config {
 		},
 	})
 	magic := certmagic.New(cache, certmagic.Config{})
-	manager := certmagic.DNSManager{DNSProvider: &provider}
 	acme := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
-		CA:                      ca,
-		Email:                   Config.API.NotificationEmail,
-		Agreed:                  true,
-		DNS01Solver:             &certmagic.DNS01Solver{DNSManager: manager},
+		CA:     ca,
+		Email:  Config.API.NotificationEmail,
+		Agreed: true,
+		DNS01Solver: &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{
+			DNSProvider: &provider,
+		}},
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,
 	})
