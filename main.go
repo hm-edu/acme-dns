@@ -14,7 +14,7 @@ import (
 	"syscall"
 
 	"github.com/caddyserver/certmagic"
-	legolog "github.com/go-acme/lego/v3/log"
+	legolog "github.com/go-acme/lego/v4/log"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	log "github.com/sirupsen/logrus"

@@ -8,7 +8,6 @@ require (
 	github.com/caddyserver/certmagic v0.21.3
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
 	github.com/gavv/httpexpect v2.0.0+incompatible
-	github.com/go-acme/lego/v3 v3.9.0
 	github.com/go-acme/lego/v4 v4.17.4
 	github.com/google/uuid v1.6.0
 	github.com/julienschmidt/httprouter v1.3.0
@@ -37,8 +36,11 @@ require (
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mholt/acmez/v2 v2.0.1 // indirect
 	github.com/moul/http2curl v1.0.0 // indirect
+	github.com/onsi/ginkgo v1.7.0 // indirect
+	github.com/onsi/gomega v1.4.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.34.0 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
