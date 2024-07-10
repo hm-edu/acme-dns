@@ -30,6 +30,7 @@ type general struct {
 	Nsadmin       string
 	Debug         bool
 	StaticRecords []string `toml:"records"`
+	Resolvers     []string `toml:"resolvers"`
 }
 
 type dbsettings struct {

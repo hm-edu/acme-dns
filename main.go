@@ -198,6 +198,7 @@ func setupAcme(dnsservers []*DNSServer) *certmagic.Config {
 		Agreed: true,
 		DNS01Solver: &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{
 			DNSProvider: &provider,
+			Resolvers:   Config.General.Resolvers,
 		}},
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,
