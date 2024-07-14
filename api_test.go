@@ -113,7 +113,7 @@ func TestApiRegister(t *testing.T) {
 		ContainsKey("allowfrom").
 		NotContainsKey("error")
 
-	response.Value("allowfrom").Array().Elements("123.123.123.123/32", "2001:db8:a0b:12f0::1/32", "::1/64")
+	response.Value("allowfrom").Array().ConsistsOf("123.123.123.123/32", "2001:db8:a0b:12f0::1/32", "::1/64")
 }
 
 func TestApiRegisterBadAllowFrom(t *testing.T) {
@@ -142,7 +142,7 @@ func TestApiRegisterBadAllowFrom(t *testing.T) {
 			JSON().Object().
 			ContainsKey("error")
 
-		response.Value("error").Equal("invalid_allowfrom_cidr")
+		response.Value("error").IsEqual("invalid_allowfrom_cidr")
 	}
 }
 
