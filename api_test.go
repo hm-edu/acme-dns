@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/gavv/httpexpect"
+	"github.com/gavv/httpexpect/v2"
 	"github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
@@ -95,7 +95,7 @@ func TestApiRegister(t *testing.T) {
 		NotContainsKey("error")
 
 	allowfrom := map[string][]interface{}{
-		"allowfrom": []interface{}{"123.123.123.123/32",
+		"allowfrom": {"123.123.123.123/32",
 			"2001:db8:a0b:12f0::1/32",
 			"[::1]/64",
 		},
@@ -133,7 +133,7 @@ func TestApiRegisterBadAllowFrom(t *testing.T) {
 	for _, v := range invalidVals {
 
 		allowfrom := map[string][]interface{}{
-			"allowfrom": []interface{}{v}}
+			"allowfrom": {v}}
 
 		response := e.POST("/register").
 			WithJSON(allowfrom).
@@ -218,7 +218,7 @@ func TestApiUpdateWithInvalidSubdomain(t *testing.T) {
 		JSON().Object().
 		ContainsKey("error").
 		NotContainsKey("txt").
-		ValueEqual("error", "forbidden")
+		HasValue("error", "forbidden")
 }
 
 func TestApiUpdateWithInvalidTxt(t *testing.T) {
@@ -248,7 +248,7 @@ func TestApiUpdateWithInvalidTxt(t *testing.T) {
 		JSON().Object().
 		ContainsKey("error").
 		NotContainsKey("txt").
-		ValueEqual("error", "bad_txt")
+		HasValue("error", "bad_txt")
 }
 
 func TestApiUpdateWithoutCredentials(t *testing.T) {
@@ -290,7 +290,7 @@ func TestApiUpdateWithCredentials(t *testing.T) {
 		JSON().Object().
 		ContainsKey("txt").
 		NotContainsKey("error").
-		ValueEqual("txt", validTxtData)
+		HasValue("txt", validTxtData)
 }
 
 func TestApiUpdateWithCredentialsMockDB(t *testing.T) {
