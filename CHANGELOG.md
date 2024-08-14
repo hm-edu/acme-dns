@@ -1,4 +1,13 @@
 # Changelog
+- v0.16:
+  - Switched to go 1.23
+- v0.15.2:
+  - Bump the libraries
+- v0.15.1:
+  - Bump the libraries
+- v0.15:
+  - Disable the Go codecov
+  - Bump the libraries
 - v0.14:
   - Switched to go 1.22
 - v0.13.1

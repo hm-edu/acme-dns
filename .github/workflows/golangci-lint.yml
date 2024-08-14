@@ -1,12 +1,19 @@
 name: golangci-lint
 on:
-  push:
   pull_request:
-  
+  push:
+    tags:
+      - "*"
+
 jobs:
   golangci:
     name: Lint Sourcecode
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: write
+
     steps:
 
       - name: Check out code
@@ -14,11 +21,11 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.23'
           cache: false
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.55.2
+          version: v1.60.1
           args: --timeout 240s
