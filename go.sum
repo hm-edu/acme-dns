@@ -26,6 +26,8 @@ github.com/gavv/httpexpect/v2 v2.16.0 h1:Ty2favARiTYTOkCRZGX7ojXXjGyNAIohM1lZ3vq
 github.com/gavv/httpexpect/v2 v2.16.0/go.mod h1:uJLaO+hQ25ukBJtQi750PsztObHybNllN+t+MbbW8PY=
 github.com/go-acme/lego/v4 v4.17.4 h1:h0nePd3ObP6o7kAkndtpTzCw8shOZuWckNYeUQwo36Q=
 github.com/go-acme/lego/v4 v4.17.4/go.mod h1:dU94SvPNqimEeb7EVilGGSnS0nU1O5Exir0pQ4QFL4U=
+github.com/go-acme/lego/v4 v4.18.0 h1:2hH8KcdRBSb+p5o9VZIm61GAOXYALgILUCSs1Q+OYsk=
+github.com/go-acme/lego/v4 v4.18.0/go.mod h1:Blkg3izvXpl3zxk7WKngIuwR2I/hvYVP3vRnvgBp7m8=
 github.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=
 github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
 github.com/google/go-cmp v0.5.2/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
