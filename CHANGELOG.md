@@ -1,4 +1,6 @@
 # Changelog
+- v0.16.1:
+    - Enable CGO_ENABLED inside the build process
 - v0.16:
   - Switched to go 1.23
 - v0.15.2:

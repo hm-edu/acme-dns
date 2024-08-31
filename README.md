@@ -120,7 +120,7 @@ See the INSTALL section for information on how to do this.
 2. Build acme-dns:
 
    ```bash
-   git clone https://github.com/joohoi/acme-dns
+   git clone https://github.com/zpascal/acme-dns
    cd acme-dns
    export GOPATH=/tmp/acme-dns
    go build
@@ -141,9 +141,9 @@ See the INSTALL section for information on how to do this.
 
 ### Using Docker
 
-1. Pull the latest acme-dns Docker image: `docker pull joohoi/acme-dns`.
+1. Pull the latest acme-dns Docker image: `docker pull ghcr.io/zpascal/acme-dns`.
 2. Create directories: `config` for the configuration file, and `data` for the sqlite3 database.
-3. Copy [configuration template](https://raw.githubusercontent.com/joohoi/acme-dns/master/config.cfg) to `config/config.cfg`.
+3. Copy [configuration template](https://raw.githubusercontent.com/zpascal/acme-dns/master/config.cfg) to `config/config.cfg`.
 4. Modify the `config.cfg` to suit your needs.
 5. Run Docker, this example expects that you have `port = "80"` in your `config.cfg`:
 
@@ -154,14 +154,14 @@ See the INSTALL section for information on how to do this.
    -p 80:80                                      \
    -v /path/to/your/config:/etc/acme-dns:ro      \
    -v /path/to/your/data:/var/lib/acme-dns       \
-   -d joohoi/acme-dns
+   -d ghcr.io/zpascal/acme-dns
    ```
 
 ### Docker Compose
 
 1. Create directories: `config` for the configuration file, and `data` for the sqlite3 database.
-2. Copy [configuration template](https://raw.githubusercontent.com/joohoi/acme-dns/master/config.cfg) to `config/config.cfg`.
-3. Copy [docker-compose.yml from the project](https://raw.githubusercontent.com/joohoi/acme-dns/master/docker-compose.yml), or create your own.
+2. Copy [configuration template](https://raw.githubusercontent.com/zpascal/acme-dns/master/config.cfg) to `config/config.cfg`.
+3. Copy [docker-compose.yml from the project](https://raw.githubusercontent.com/zpascal/acme-dns/master/docker-compose.yml), or create your own.
 4. Edit the `config/config.cfg` and `docker-compose.yml` to suit your needs, and run `docker-compose up -d`.
 
 ## DNS Records
@@ -314,7 +314,7 @@ use for the renewal.
 ### Authentication hooks
 
 - acme-dns-client with Certbot authentication hook: [https://github.com/acme-dns/acme-dns-client](https://github.com/acme-dns/acme-dns-client)
-- Certbot authentication hook in Python: [https://github.com/joohoi/acme-dns-certbot-joohoi](https://github.com/joohoi/acme-dns-certbot-joohoi)
+- Certbot authentication hook in Python: [https://github.com/zpascal/acme-dns-certbot-joohoi](https://github.com/zpascal/acme-dns-certbot-joohoi)
 - Certbot authentication hook in Go: [https://github.com/koesie10/acme-dns-certbot-hook](https://github.com/koesie10/acme-dns-certbot-hook)
 
 ### Libraries
