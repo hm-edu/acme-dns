@@ -1,6 +1,6 @@
 # Changelog
-- v0.16.1:
-    - Enable CGO_ENABLED inside the build process
+- v0.17.0:
+    - Replace the SQLite driver
 - v0.16:
   - Switched to go 1.23
 - v0.15.2:
