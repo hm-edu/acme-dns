@@ -32,6 +32,8 @@ github.com/go-acme/lego/v4 v4.18.0 h1:2hH8KcdRBSb+p5o9VZIm61GAOXYALgILUCSs1Q+OYs
 github.com/go-acme/lego/v4 v4.18.0/go.mod h1:Blkg3izvXpl3zxk7WKngIuwR2I/hvYVP3vRnvgBp7m8=
 github.com/go-acme/lego/v4 v4.19.0 h1:c7YabBOwoa2URsPiCNGQsdzQnbd8Y23B4/66gxh4H7c=
 github.com/go-acme/lego/v4 v4.19.0/go.mod h1:wtDe3dDkmV4/oI2nydpNXSJpvV10J9RCyZ6MbYxNtlQ=
+github.com/go-acme/lego/v4 v4.19.2 h1:Y8hrmMvWETdqzzkRly7m98xtPJJivWFsgWi8fcvZo+Y=
+github.com/go-acme/lego/v4 v4.19.2/go.mod h1:wtDe3dDkmV4/oI2nydpNXSJpvV10J9RCyZ6MbYxNtlQ=
 github.com/gobwas/glob v0.2.3 h1:A4xDbljILXROh+kObIiy5kIaPYD8e96x1tgBhUI5J+Y=
 github.com/gobwas/glob v0.2.3/go.mod h1:d3Ez4x06l9bZtSvzIay5+Yzi0fmZzPgnTbPcKjJAkT8=
 github.com/google/go-cmp v0.5.2/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
