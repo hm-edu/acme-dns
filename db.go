@@ -11,9 +11,9 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"
-	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
+	_ "modernc.org/sqlite"
 )
 
 // DBVersion shows the database version this code uses. This is used for update checks.
@@ -57,6 +57,11 @@ func getSQLiteStmt(s string) string {
 func (d *acmedb) Init(engine string, connection string) error {
 	d.Lock()
 	defer d.Unlock()
+
+	if engine == "sqlite3" {
+		engine = "sqlite"
+	}
+
 	db, err := sql.Open(engine, connection)
 	if err != nil {
 		return err
@@ -184,7 +189,7 @@ func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
 		_ = tx.Commit()
 	}()
 	a := newACMETxt()
-	a.AllowFrom = cidrslice(afrom.ValidEntries())
+	a.AllowFrom = afrom.ValidEntries()
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(a.Password), 10)
 	regSQL := `
     INSERT INTO records(
