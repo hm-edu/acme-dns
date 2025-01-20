@@ -5,7 +5,7 @@ go 1.23.0
 require (
 	github.com/BurntSushi/toml v1.4.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/caddyserver/certmagic v0.21.6
+	github.com/caddyserver/certmagic v0.21.7
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
 	github.com/gavv/httpexpect v2.0.0+incompatible
 	github.com/go-acme/lego/v3 v3.9.0
@@ -36,7 +36,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mholt/acmez/v3 v3.0.0 // indirect
+	github.com/mholt/acmez/v3 v3.0.1 // indirect
 	github.com/moul/http2curl v1.0.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
