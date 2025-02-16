@@ -1,4 +1,8 @@
 # Changelog
+- v0.18.0:
+  - Switched to go 1.24
+- v0.17.1:
+  - Dependencies update
 - v0.17.0:
     - Replace the SQLite driver
 - v0.16:

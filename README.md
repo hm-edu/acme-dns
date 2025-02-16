@@ -116,7 +116,7 @@ See the INSTALL section for information on how to do this.
 
 ## Installation
 
-1. Install [Go 1.23 or newer](https://golang.org/doc/install).
+1. Install [Go 1.24 or newer](https://golang.org/doc/install).
 2. Build acme-dns:
 
    ```bash
