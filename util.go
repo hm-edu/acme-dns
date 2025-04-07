@@ -26,8 +26,8 @@ func fileIsAccessible(fname string) bool {
 	if err != nil {
 		return false
 	}
-	f.Close()
-	return true
+	err = f.Close()
+	return err == nil
 }
 
 func readConfig(fname string) (DNSConfig, error) {

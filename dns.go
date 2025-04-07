@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/miekg/dns"
-	log "github.com/sirupsen/logrus"
 	"strings"
 	"time"
+
+	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
 )
 
 // Records is a slice of ResourceRecords
@@ -94,6 +95,7 @@ func (d *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	if opt != nil {
 		if opt.Version() != 0 {
 			// Only EDNS0 is standardized
+			//nolint:staticcheck
 			m.MsgHdr.Rcode = dns.RcodeBadVers
 			m.SetEdns0(512, false)
 		} else {
@@ -118,12 +120,15 @@ func (d *DNSServer) readQuery(m *dns.Msg) {
 			if auth {
 				authoritative = auth
 			}
+			//nolint:staticcheck
 			m.MsgHdr.Rcode = rc
 			m.Answer = append(m.Answer, rr...)
 		}
 	}
+	//nolint:staticcheck
 	m.MsgHdr.Authoritative = authoritative
 	if authoritative {
+		//nolint:staticcheck
 		if m.MsgHdr.Rcode == dns.RcodeNameError {
 			m.Ns = append(m.Ns, d.SOA)
 		}
@@ -135,7 +140,7 @@ func (d *DNSServer) getRecord(q dns.Question) ([]dns.RR, error) {
 	var cnames []dns.RR
 	domain, ok := d.Domains[strings.ToLower(q.Name)]
 	if !ok {
-		return rr, fmt.Errorf("No records for domain %s", q.Name)
+		return rr, fmt.Errorf("no records for domain %s", q.Name)
 	}
 	for _, ri := range domain.Records {
 		if ri.Header().Rrtype == q.Qtype {

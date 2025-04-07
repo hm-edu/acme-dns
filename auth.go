@@ -60,7 +60,7 @@ func getUserFromRequest(r *http.Request) (ACMETxt, error) {
 	passwd := r.Header.Get("X-Api-Key")
 	username, err := getValidUsername(uname)
 	if err != nil {
-		return ACMETxt{}, fmt.Errorf("Invalid username: %s: %s", uname, err.Error())
+		return ACMETxt{}, fmt.Errorf("invalid username: %s: %s", uname, err.Error())
 	}
 	if validKey(passwd) {
 		dbuser, err := DB.GetByUsername(username)
@@ -69,14 +69,14 @@ func getUserFromRequest(r *http.Request) (ACMETxt, error) {
 			// To protect against timed side channel (never gonna give you up)
 			correctPassword(passwd, "$2a$10$8JEFVNYYhLoBysjAxe2yBuXrkDojBQBkVpXEQgyQyjn43SvJ4vL36")
 
-			return ACMETxt{}, fmt.Errorf("Invalid username: %s", uname)
+			return ACMETxt{}, fmt.Errorf("invalid username: %s", uname)
 		}
 		if correctPassword(passwd, dbuser.Password) {
 			return dbuser, nil
 		}
-		return ACMETxt{}, fmt.Errorf("Invalid password for user %s", uname)
+		return ACMETxt{}, fmt.Errorf("invalid password for user %s", uname)
 	}
-	return ACMETxt{}, fmt.Errorf("Invalid key for user %s", uname)
+	return ACMETxt{}, fmt.Errorf("invalid key for user %s", uname)
 }
 
 func updateAllowedFromIP(r *http.Request, user ACMETxt) bool {
