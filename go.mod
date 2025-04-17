@@ -13,7 +13,7 @@ require (
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
 	github.com/libdns/libdns v0.2.3
-	github.com/mattn/go-sqlite3 v1.14.27
+	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/miekg/dns v1.1.65
 	github.com/rs/cors v1.11.1
 	github.com/sirupsen/logrus v1.9.3
