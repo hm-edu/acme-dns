@@ -122,7 +122,7 @@ func (d *acmedb) handleDBUpgradeTo1() error {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("Error in DB upgrade")
 		return err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 	for rows.Next() {
 		var subdomain string
 		err = rows.Scan(&subdomain)
@@ -206,7 +206,7 @@ func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("Database error in prepare")
 		return a, errors.New("SQL error")
 	}
-	defer sm.Close()
+	defer closeStatement(sm)
 	_, err = sm.Exec(a.Username.String(), passwordHash, a.Subdomain, a.AllowFrom.JSON())
 	if err == nil {
 		err = d.NewTXTValuesInTransaction(tx, a.Subdomain)
@@ -231,12 +231,12 @@ func (d *acmedb) GetByUsername(u uuid.UUID) (ACMETxt, error) {
 	if err != nil {
 		return ACMETxt{}, err
 	}
-	defer sm.Close()
+	defer closeStatement(sm)
 	rows, err := sm.Query(u.String())
 	if err != nil {
 		return ACMETxt{}, err
 	}
-	defer rows.Close()
+	defer closeRows(rows)
 
 	// It will only be one row though
 	for rows.Next() {
@@ -268,13 +268,12 @@ func (d *acmedb) GetTXTForDomain(domain string) ([]string, error) {
 	if err != nil {
 		return txts, err
 	}
-	defer sm.Close()
+	defer closeStatement(sm)
 	rows, err := sm.Query(domain)
 	if err != nil {
 		return txts, err
 	}
-	defer rows.Close()
-
+	defer closeRows(rows)
 	for rows.Next() {
 		var rtxt string
 		err = rows.Scan(&rtxt)
@@ -306,7 +305,7 @@ func (d *acmedb) Update(a ACMETxtPost) error {
 	if err != nil {
 		return err
 	}
-	defer sm.Close()
+	defer closeStatement(sm)
 	_, err = sm.Exec(a.Value, timenow, a.Subdomain)
 	if err != nil {
 		return err
@@ -326,17 +325,17 @@ func getModelFromRow(r *sql.Rows) (ACMETxt, error) {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("Row scan error")
 	}
 
-	cslice := cidrslice{}
-	err = json.Unmarshal([]byte(afrom), &cslice)
+	cSlice := cidrslice{}
+	err = json.Unmarshal([]byte(afrom), &cSlice)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("JSON unmarshall error")
 	}
-	txt.AllowFrom = cslice
+	txt.AllowFrom = cSlice
 	return txt, err
 }
 
 func (d *acmedb) Close() {
-	d.DB.Close()
+	_ = d.DB.Close()
 }
 
 func (d *acmedb) GetBackend() *sql.DB {
@@ -345,4 +344,18 @@ func (d *acmedb) GetBackend() *sql.DB {
 
 func (d *acmedb) SetBackend(backend *sql.DB) {
 	d.DB = backend
+}
+
+func closeStatement(sm *sql.Stmt) {
+	smErr := sm.Close()
+	if smErr != nil {
+		panic(smErr)
+	}
+}
+
+func closeRows(rows *sql.Rows) {
+	rsErr := rows.Close()
+	if rsErr != nil {
+		panic(rsErr)
+	}
 }

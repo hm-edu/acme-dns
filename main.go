@@ -101,35 +101,37 @@ func main() {
 	}
 }
 
-func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer) {
+func startHTTPAPI(errChan chan error, config DNSConfig, dnsServers []*DNSServer) {
 	// Setup http logger
 	logger := log.New()
-	logwriter := logger.Writer()
-	defer logwriter.Close()
+	logWriter := logger.Writer()
+	defer func() {
+		_ = logWriter.Close()
+	}()
 	// Setup logging for different dependencies to log with logrus
 	// Certmagic
-	stdlog.SetOutput(logwriter)
+	stdlog.SetOutput(logWriter)
 	// Lego
 	legolog.Logger = logger
 
 	api := httprouter.New()
 	c := cors.New(cors.Options{
-		AllowedOrigins:     Config.API.CorsOrigins,
+		AllowedOrigins:     config.API.CorsOrigins,
 		AllowedMethods:     []string{"GET", "POST"},
 		OptionsPassthrough: false,
-		Debug:              Config.General.Debug,
+		Debug:              config.General.Debug,
 	})
-	if Config.General.Debug {
+	if config.General.Debug {
 		// Logwriter for saner log output
-		c.Log = stdlog.New(logwriter, "", 0)
+		c.Log = stdlog.New(logWriter, "", 0)
 	}
-	if !Config.API.DisableRegistration {
+	if !config.API.DisableRegistration {
 		api.POST("/register", webRegisterPost)
 	}
 	api.POST("/update", Auth(webUpdatePost))
 	api.GET("/health", healthCheck)
 
-	host := Config.API.IP + ":" + Config.API.Port
+	host := config.API.IP + ":" + config.API.Port
 
 	// TLS specific general settings
 	cfg := &tls.Config{
@@ -137,12 +139,12 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 	}
 
 	var err error
-	switch Config.API.TLS {
+	switch config.API.TLS {
 	case "letsencryptstaging", "letsencrypt":
 
-		magic := setupAcme(dnsservers)
+		magic := setupAcme(dnsServers)
 
-		err = magic.ManageSync(context.Background(), []string{Config.General.Domain})
+		err = magic.ManageSync(context.Background(), []string{config.General.Domain})
 		if err != nil {
 			errChan <- err
 			return
@@ -152,19 +154,19 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer)
 			Addr:      host,
 			Handler:   c.Handler(api),
 			TLSConfig: cfg,
-			ErrorLog:  stdlog.New(logwriter, "", 0),
+			ErrorLog:  stdlog.New(logWriter, "", 0),
 		}
-		log.WithFields(log.Fields{"host": host, "domain": Config.General.Domain}).Info("Listening HTTPS")
+		log.WithFields(log.Fields{"host": host, "domain": config.General.Domain}).Info("Listening HTTPS")
 		err = srv.ListenAndServeTLS("", "")
 	case "cert":
 		srv := &http.Server{
 			Addr:      host,
 			Handler:   c.Handler(api),
 			TLSConfig: cfg,
-			ErrorLog:  stdlog.New(logwriter, "", 0),
+			ErrorLog:  stdlog.New(logWriter, "", 0),
 		}
 		log.WithFields(log.Fields{"host": host}).Info("Listening HTTPS")
-		err = srv.ListenAndServeTLS(Config.API.TLSCertFullchain, Config.API.TLSCertPrivkey)
+		err = srv.ListenAndServeTLS(config.API.TLSCertFullchain, config.API.TLSCertPrivkey)
 	default:
 		log.WithFields(log.Fields{"host": host}).Info("Listening HTTP")
 		err = http.ListenAndServe(host, c.Handler(api))

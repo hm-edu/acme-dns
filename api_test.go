@@ -181,7 +181,9 @@ func TestApiRegisterWithMockDB(t *testing.T) {
 	oldDb := DB.GetBackend()
 	db, mock, _ := sqlmock.New()
 	DB.SetBackend(db)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	mock.ExpectBegin()
 	mock.ExpectPrepare("INSERT INTO records").WillReturnError(errors.New("error"))
 	e.POST("/register").Expect().
@@ -310,7 +312,9 @@ func TestApiUpdateWithCredentialsMockDB(t *testing.T) {
 	oldDb := DB.GetBackend()
 	db, mock, _ := sqlmock.New()
 	DB.SetBackend(db)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 	mock.ExpectBegin()
 	mock.ExpectPrepare("UPDATE records").WillReturnError(errors.New("error"))
 	e.POST("/update").

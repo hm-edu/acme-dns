@@ -50,20 +50,19 @@ func TestReadConfig(t *testing.T) {
 			DNSConfig{},
 		},
 	} {
-		tmpfile, err := os.CreateTemp("", "acmedns")
+		tmpFile, err := os.CreateTemp("", "acmedns")
 		if err != nil {
 			t.Error("Could not create temporary file")
 		}
-		defer os.Remove(tmpfile.Name())
-
-		if _, err := tmpfile.Write(test.inFile); err != nil {
+		defer cleanupTmpFile(tmpFile.Name())
+		if _, err := tmpFile.Write(test.inFile); err != nil {
 			t.Error("Could not write to temporary file")
 		}
 
-		if err := tmpfile.Close(); err != nil {
+		if err := tmpFile.Close(); err != nil {
 			t.Error("Could not close temporary file")
 		}
-		ret, _ := readConfig(tmpfile.Name())
+		ret, _ := readConfig(tmpFile.Name())
 		if ret.General.Listen != test.output.General.Listen {
 			t.Errorf("Test %d: Expected listen value %s, but got %s", i, test.output.General.Listen, ret.General.Listen)
 		}
@@ -98,16 +97,16 @@ func TestGetIPListFromHeader(t *testing.T) {
 }
 
 func TestFileCheckPermissionDenied(t *testing.T) {
-	tmpfile, err := os.CreateTemp("", "acmedns")
+	tmpFile, err := os.CreateTemp("", "acmedns")
 	if err != nil {
 		t.Error("Could not create temporary file")
 	}
-	defer os.Remove(tmpfile.Name())
-	_ = syscall.Chmod(tmpfile.Name(), 0000)
-	if fileIsAccessible(tmpfile.Name()) {
+	defer cleanupTmpFile(tmpFile.Name())
+	_ = syscall.Chmod(tmpFile.Name(), 0000)
+	if fileIsAccessible(tmpFile.Name()) {
 		t.Errorf("File should not be accessible")
 	}
-	_ = syscall.Chmod(tmpfile.Name(), 0644)
+	_ = syscall.Chmod(tmpFile.Name(), 0644)
 }
 
 func TestFileCheckNotExists(t *testing.T) {
@@ -117,12 +116,12 @@ func TestFileCheckNotExists(t *testing.T) {
 }
 
 func TestFileCheckOK(t *testing.T) {
-	tmpfile, err := os.CreateTemp("", "acmedns")
+	tmpFile, err := os.CreateTemp("", "acmedns")
 	if err != nil {
 		t.Error("Could not create temporary file")
 	}
-	defer os.Remove(tmpfile.Name())
-	if !fileIsAccessible(tmpfile.Name()) {
+	defer cleanupTmpFile(tmpFile.Name())
+	if !fileIsAccessible(tmpFile.Name()) {
 		t.Errorf("File should be accessible")
 	}
 }
@@ -146,5 +145,11 @@ func TestPrepareConfig(t *testing.T) {
 				t.Errorf("Test %d: Expected no error with prepareConfig input data [%v]", i, test.input)
 			}
 		}
+	}
+}
+
+func cleanupTmpFile(tmpFile string) {
+	if err := os.Remove(tmpFile); err != nil {
+		panic("Could not remove temporary file")
 	}
 }
