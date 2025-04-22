@@ -5,14 +5,14 @@ go 1.24.0
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/caddyserver/certmagic v0.22.2
+	github.com/caddyserver/certmagic v0.23.0
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5
 	github.com/gavv/httpexpect/v2 v2.17.0
 	github.com/go-acme/lego/v4 v4.23.1
 	github.com/google/uuid v1.6.0
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/lib/pq v1.10.9
-	github.com/libdns/libdns v0.2.3
+	github.com/libdns/libdns v1.0.0-beta.1
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/miekg/dns v1.1.65
 	github.com/rs/cors v1.11.1
@@ -38,7 +38,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mholt/acmez/v3 v3.1.1 // indirect
+	github.com/mholt/acmez/v3 v3.1.2 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sanity-io/litter v1.5.5 // indirect
