@@ -22,9 +22,9 @@ func (c *ChallengeProvider) AppendRecords(ctx context.Context, zone string, recs
 	var token string
 	for _, item := range recs {
 
-		log.WithFields(log.Fields{"name": item.Name, "value": item.Value, "type": item.Type}).Info("Attempting to set dns record")
-		if strings.Contains(item.Name, "acme-challenge") {
-			token = item.Value
+		log.WithFields(log.Fields{"name": item.RR().Name, "value": item.RR().Data, "type": item.RR().Type}).Info("Attempting to set dns record")
+		if strings.Contains(item.RR().Name, "acme-challenge") {
+			token = item.RR().Data
 			break
 		}
 	}
@@ -37,7 +37,7 @@ func (c *ChallengeProvider) AppendRecords(ctx context.Context, zone string, recs
 
 func (c *ChallengeProvider) DeleteRecords(ctx context.Context, zone string, recs []libdns.Record) ([]libdns.Record, error) {
 	for _, item := range recs {
-		log.WithFields(log.Fields{"name": item.Name, "value": item.Value, "type": item.Type}).Info("Attempting to unset dns record")
+		log.WithFields(log.Fields{"name": item.RR().Name, "value": item.RR().Data, "type": item.RR().Type}).Info("Attempting to unset dns record")
 	}
 	for _, s := range c.servers {
 		s.PersonalKeyAuth = ""
