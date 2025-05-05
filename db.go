@@ -68,12 +68,18 @@ func (d *acmedb) Init(engine string, connection string) error {
 	if versionString == "" {
 		versionString = "0"
 	}
-	_, _ = d.DB.Exec(acmeTable)
-	_, _ = d.DB.Exec(userTable)
+	_, err = d.DB.Exec(acmeTable)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Error("Error creating acmedns table")
+	}
+	_, err = d.DB.Exec(userTable)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Error("Error creating records table")
+	}
 	if Config.Database.Engine == "sqlite3" {
-		_, _ = d.DB.Exec(txtTable)
+		_, err = d.DB.Exec(txtTable)
 	} else {
-		_, _ = d.DB.Exec(txtTablePG)
+		_, err = d.DB.Exec(txtTablePG)
 	}
 	// If everything is fine, handle db upgrade tasks
 	if err == nil {
