@@ -14,7 +14,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/libdns/libdns v1.1.0
 	github.com/mattn/go-sqlite3 v1.14.30
-	github.com/miekg/dns v1.1.67
+	github.com/miekg/dns v1.1.68
 	github.com/rs/cors v1.11.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
