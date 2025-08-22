@@ -4,19 +4,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    reviewers:
-      - "ZPascal"
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "weekly"
-    reviewers:
-      - "ZPascal"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    reviewers:
-      - "ZPascal"
