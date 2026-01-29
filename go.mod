@@ -11,7 +11,7 @@ require (
 	github.com/go-acme/lego/v4 v4.31.0
 	github.com/google/uuid v1.6.0
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.11.1
 	github.com/libdns/libdns v1.1.1
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/miekg/dns v1.1.69
