@@ -17,6 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
+          token: ${{ secrets.PRIVATE_PAT_TOKEN }}
           fetch-depth: 0
 
       - name: Get latest tag
