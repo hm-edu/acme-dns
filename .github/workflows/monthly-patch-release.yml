@@ -45,7 +45,7 @@ jobs:
         run: |
           git config --local user.email "info@theiotstudio.com"
           git config --local user.name "tis-service-user"
-          git tag -a "$NEW_TAG" -m "Automated monthly patch release: ${{ steps.new-version.outputs.new-tag }}"
+          git tag -a "${{ steps.new-version.outputs.new-tag }}" -m "Automated monthly patch release: ${{ steps.new-version.outputs.new-tag }}"
 
       - name: Push changes
         uses: ad-m/github-push-action@v1
