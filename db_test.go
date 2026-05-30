@@ -275,6 +275,74 @@ func TestGetTXTForDomain(t *testing.T) {
 	}
 }
 
+func TestCreateAndListRecord(t *testing.T) {
+	rec := DNSRecord{
+		ID:      "test-uuid-1",
+		Name:    "sub.example.com.",
+		Type:    "A",
+		Value:   "1.2.3.4",
+		TTL:     300,
+		Created: 0,
+	}
+	err := DB.CreateRecord(rec)
+	if err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	t.Cleanup(func() { _ = DB.DeleteRecord("test-uuid-1") })
+
+	records, err := DB.ListRecords("", "")
+	if err != nil {
+		t.Fatalf("ListRecords: %v", err)
+	}
+	found := false
+	for _, r := range records {
+		if r.ID == "test-uuid-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected record test-uuid-1 in list, got %v", records)
+	}
+}
+
+func TestUpdateRecord(t *testing.T) {
+	rec := DNSRecord{ID: "upd-1", Name: "a.example.com.", Type: "A", Value: "1.1.1.1", TTL: 60, Created: 0}
+	_ = DB.CreateRecord(rec)
+	t.Cleanup(func() { _ = DB.DeleteRecord("upd-1") })
+
+	rec.Value = "2.2.2.2"
+	err := DB.UpdateRecord(rec)
+	if err != nil {
+		t.Fatalf("UpdateRecord: %v", err)
+	}
+	records, _ := DB.ListRecords("A", "a.example.com.")
+	if len(records) == 0 || records[0].Value != "2.2.2.2" {
+		t.Fatalf("expected updated value 2.2.2.2, got %v", records)
+	}
+}
+
+func TestUpdateRecordNotFound(t *testing.T) {
+	err := DB.UpdateRecord(DNSRecord{ID: "nonexistent", Name: "x.example.com.", Type: "A", Value: "1.1.1.1", TTL: 60})
+	if err != sql.ErrNoRows {
+		t.Fatalf("expected sql.ErrNoRows for missing ID, got %v", err)
+	}
+}
+
+func TestDeleteRecord(t *testing.T) {
+	rec := DNSRecord{ID: "del-1", Name: "b.example.com.", Type: "A", Value: "3.3.3.3", TTL: 60, Created: 0}
+	_ = DB.CreateRecord(rec)
+	t.Cleanup(func() { _ = DB.DeleteRecord("del-1") })
+
+	err := DB.DeleteRecord("del-1")
+	if err != nil {
+		t.Fatalf("DeleteRecord: %v", err)
+	}
+	records, _ := DB.ListRecords("A", "b.example.com.")
+	if len(records) != 0 {
+		t.Fatalf("expected 0 records after delete, got %d", len(records))
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	// Create  reg to refer to
 	reg, err := DB.Register(cidrslice{})

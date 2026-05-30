@@ -1,7 +1,9 @@
 package main
 
 import (
+	"net"
 	"regexp"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -43,6 +45,35 @@ func validTXT(s string) bool {
 func correctPassword(pw string, hash string) bool {
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(pw)); err == nil {
 		return true
+	}
+	return false
+}
+
+func validRecordType(typ string) bool {
+	switch typ {
+	case "A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "CAA", "PTR":
+		return true
+	}
+	return false
+}
+
+func validTTL(ttl int) bool {
+	return ttl >= 1 && ttl <= 86400
+}
+
+func validRecordValue(rtype, value string) bool {
+	if value == "" {
+		return false
+	}
+	switch rtype {
+	case "A":
+		ip := net.ParseIP(value)
+		return ip != nil && ip.To4() != nil && !strings.Contains(value, ":")
+	case "AAAA":
+		ip := net.ParseIP(value)
+		return ip != nil && ip.To4() == nil
+	case "CNAME", "MX", "NS", "PTR", "SRV", "TXT", "CAA":
+		return true // non-empty check handled above; structural validation deferred to dns.NewRR
 	}
 	return false
 }

@@ -110,6 +110,71 @@ func TestCorrectPassword(t *testing.T) {
 	}
 }
 
+func TestValidRecordType(t *testing.T) {
+	valid := []string{"A", "AAAA", "CNAME", "MX", "TXT", "NS", "SRV", "CAA", "PTR"}
+	for _, rt := range valid {
+		if !validRecordType(rt) {
+			t.Errorf("expected %s to be valid", rt)
+		}
+	}
+	invalid := []string{"SOA", "AXFR", "ANY", "", "a", "aaaa"}
+	for _, rt := range invalid {
+		if validRecordType(rt) {
+			t.Errorf("expected %s to be invalid", rt)
+		}
+	}
+}
+
+func TestValidTTL(t *testing.T) {
+	valid := []int{1, 60, 300, 3600, 86400}
+	for _, ttl := range valid {
+		if !validTTL(ttl) {
+			t.Errorf("expected TTL %d to be valid", ttl)
+		}
+	}
+	invalid := []int{0, -1, 86401, 999999}
+	for _, ttl := range invalid {
+		if validTTL(ttl) {
+			t.Errorf("expected TTL %d to be invalid", ttl)
+		}
+	}
+}
+
+func TestValidRecordValue(t *testing.T) {
+	cases := []struct {
+		rtype string
+		value string
+		valid bool
+	}{
+		{"A", "1.2.3.4", true},
+		{"A", "256.1.1.1", false},
+		{"A", "not-an-ip", false},
+		{"A", "::ffff:1.2.3.4", false},
+		{"AAAA", "2001:db8::1", true},
+		{"AAAA", "1.2.3.4", false},
+		{"CNAME", "example.com", true},
+		{"CNAME", "", false},
+		{"MX", "mail.example.com", true},
+		{"MX", "", false},
+		{"NS", "ns1.example.com", true},
+		{"NS", "", false},
+		{"TXT", "any text value here", true},
+		{"TXT", "", false},
+		{"SRV", "_sip._tcp.example.com", true},
+		{"SRV", "", false},
+		{"CAA", "0 issue \"letsencrypt.org\"", true},
+		{"CAA", "", false},
+		{"PTR", "host.example.com", true},
+		{"PTR", "", false},
+	}
+	for _, tc := range cases {
+		got := validRecordValue(tc.rtype, tc.value)
+		if got != tc.valid {
+			t.Errorf("validRecordValue(%q, %q) = %v, want %v", tc.rtype, tc.value, got, tc.valid)
+		}
+	}
+}
+
 func TestGetValidCIDRMasks(t *testing.T) {
 	for i, test := range []struct {
 		input  cidrslice

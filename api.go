@@ -1,14 +1,38 @@
 package main
 
 import (
+	"crypto/subtle"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/julienschmidt/httprouter"
+	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
+// toFQDN ensures a DNS name ends with a trailing dot for consistent storage and lookup.
+func toFQDN(name string) string {
+	name = strings.ToLower(name)
+	if !strings.HasSuffix(name, ".") {
+		name += "."
+	}
+	return name
+}
+
+// probeRR validates that rtype+value form a parseable DNS RR using a placeholder name and TTL.
+func probeRR(rtype, value string) bool {
+	if rtype == "TXT" || rtype == "CAA" {
+		value = `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+	}
+	_, err := dns.NewRR(fmt.Sprintf("probe.invalid. 300 IN %s %s", rtype, value))
+	return err == nil
+}
 // RegResponse is a struct for registration response JSON
 type RegResponse struct {
 	Username   string   `json:"username"`
@@ -109,4 +133,200 @@ func webUpdatePost(w http.ResponseWriter, r *http.Request, _ httprouter.Params) 
 // Endpoint used to check the readiness and/or liveness (health) of the server.
 func healthCheck(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.WriteHeader(http.StatusOK)
+}
+
+// adminRecordRequest is the request body for creating/updating a DNS record
+type adminRecordRequest struct {
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
+	TTL   int    `json:"ttl"`
+}
+
+func adminBearerMiddleware(next httprouter.Handle) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+		token := Config.API.Admin.Token
+		auth := r.Header.Get("Authorization")
+		provided := strings.TrimPrefix(auth, "Bearer ")
+		if subtle.ConstantTimeCompare([]byte(token), []byte(provided)) != 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write(jsonError("unauthorized"))
+			return
+		}
+		next(w, r, ps)
+	}
+}
+
+func adminListRecords(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	filterType := strings.ToUpper(r.URL.Query().Get("type"))
+	filterName := r.URL.Query().Get("name")
+	if filterName != "" {
+		filterName = toFQDN(filterName)
+	}
+	records, err := DB.ListRecords(filterType, filterName)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Error("Error in admin handler")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(jsonError("db_error"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(records)
+}
+
+func adminCreateRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	var req adminRecordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("malformed_json_payload"))
+		return
+	}
+	if req.Name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_name"))
+		return
+	}
+	if !validRecordType(req.Type) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_type"))
+		return
+	}
+	if !validRecordValue(req.Type, req.Value) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_value"))
+		return
+	}
+	if !probeRR(req.Type, req.Value) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_value"))
+		return
+	}
+	ttl := req.TTL
+	if ttl == 0 {
+		ttl = 300
+	}
+	if !validTTL(ttl) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_ttl"))
+		return
+	}
+	rec := DNSRecord{
+		ID:      uuid.New().String(),
+		Name:    toFQDN(req.Name),
+		Type:    req.Type,
+		Value:   req.Value,
+		TTL:     ttl,
+		Created: time.Now().Unix(),
+	}
+	if err := DB.CreateRecord(rec); err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Error("Error in admin handler")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write(jsonError("db_error"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(rec)
+}
+
+func adminUpdateRecord(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	var req adminRecordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("malformed_json_payload"))
+		return
+	}
+	if req.Name == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_name"))
+		return
+	}
+	if !validRecordType(req.Type) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_type"))
+		return
+	}
+	if !validRecordValue(req.Type, req.Value) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_value"))
+		return
+	}
+	if !probeRR(req.Type, req.Value) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_record_value"))
+		return
+	}
+	if req.TTL != 0 && !validTTL(req.TTL) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write(jsonError("invalid_ttl"))
+		return
+	}
+	ttl := req.TTL
+	if ttl == 0 {
+		ttl = 300
+	}
+	rec := DNSRecord{ID: id, Name: toFQDN(req.Name), Type: req.Type, Value: req.Value, TTL: ttl}
+	if err := DB.UpdateRecord(rec); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write(jsonError("record_not_found"))
+		} else {
+			log.WithFields(log.Fields{"error": err.Error()}).Error("Error in admin handler")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write(jsonError("db_error"))
+		}
+		return
+	}
+	// Fetch the full updated record to include the original Created timestamp
+	updated, err := DB.GetRecord(id)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Error("Error in admin handler")
+		w.Header().Set("Content-Type", "application/json")
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write(jsonError("record_not_found"))
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write(jsonError("db_error"))
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+func adminDeleteRecord(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	id := ps.ByName("id")
+	if err := DB.DeleteRecord(id); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		if errors.Is(err, sql.ErrNoRows) {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write(jsonError("record_not_found"))
+		} else {
+			log.WithFields(log.Fields{"error": err.Error()}).Error("Error in admin handler")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write(jsonError("db_error"))
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

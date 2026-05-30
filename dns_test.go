@@ -279,3 +279,26 @@ func TestCaseInsensitiveResolveSOA(t *testing.T) {
 		t.Error("No SOA answer for DNS query")
 	}
 }
+
+func TestAnswerManagedARecord(t *testing.T) {
+	rec := DNSRecord{
+		ID: "managed-test-1", Name: "managed.auth.example.org.", Type: "A", Value: "5.6.7.8", TTL: 300, Created: 0,
+	}
+	err := DB.CreateRecord(rec)
+	if err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	t.Cleanup(func() { _ = DB.DeleteRecord("managed-test-1") })
+
+	q := dns.Question{Name: "managed.auth.example.org.", Qtype: dns.TypeA, Qclass: dns.ClassINET}
+	rrs, rcode, _, err := dnsserver.answer(q)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR, got %s", dns.RcodeToString[rcode])
+	}
+	if len(rrs) == 0 {
+		t.Fatal("expected at least one RR in answer")
+	}
+}

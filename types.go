@@ -52,6 +52,12 @@ type httpapi struct {
 	CorsOrigins         []string
 	UseHeader           bool   `toml:"use_header"`
 	HeaderName          string `toml:"header_name"`
+	Admin               adminconfig
+}
+
+// Admin API config
+type adminconfig struct {
+	Token string
 }
 
 // Logging config
@@ -67,6 +73,16 @@ type acmedb struct {
 	DB *sql.DB
 }
 
+// DNSRecord represents a managed DNS record
+type DNSRecord struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	TTL     int    `json:"ttl"`
+	Created int64  `json:"created"`
+}
+
 type database interface {
 	Init(string, string) error
 	Register(cidrslice) (ACMETxt, error)
@@ -78,4 +94,9 @@ type database interface {
 	Close()
 	Lock()
 	Unlock()
+	CreateRecord(DNSRecord) error
+	GetRecord(id string) (DNSRecord, error)
+	ListRecords(filterType, filterName string) ([]DNSRecord, error)
+	UpdateRecord(DNSRecord) error
+	DeleteRecord(id string) error
 }

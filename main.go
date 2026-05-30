@@ -117,7 +117,8 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsServers []*DNSServer)
 	api := httprouter.New()
 	c := cors.New(cors.Options{
 		AllowedOrigins:     config.API.CorsOrigins,
-		AllowedMethods:     []string{"GET", "POST"},
+		AllowedMethods:     []string{"GET", "POST", "PUT", "DELETE"},
+		AllowedHeaders:     []string{"Authorization", "Content-Type", "X-Api-User", "X-Api-Key"},
 		OptionsPassthrough: false,
 		Debug:              config.General.Debug,
 	})
@@ -130,6 +131,12 @@ func startHTTPAPI(errChan chan error, config DNSConfig, dnsServers []*DNSServer)
 	}
 	api.POST("/update", Auth(webUpdatePost))
 	api.GET("/health", healthCheck)
+	if config.API.Admin.Token != "" {
+		api.GET("/admin/records", adminBearerMiddleware(adminListRecords))
+		api.POST("/admin/records", adminBearerMiddleware(adminCreateRecord))
+		api.PUT("/admin/records/:id", adminBearerMiddleware(adminUpdateRecord))
+		api.DELETE("/admin/records/:id", adminBearerMiddleware(adminDeleteRecord))
+	}
 
 	host := config.API.IP + ":" + config.API.Port
 

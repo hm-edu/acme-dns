@@ -209,6 +209,14 @@ func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
 			r = append(r, txtRRs...)
 		}
 	}
+	// Fall through to managed dns_records if no static or ACME records matched
+	if len(r) == 0 {
+		managed := d.answerManaged(q)
+		if len(managed) > 0 {
+			r = managed
+			authoritative = true
+		}
+	}
 	if len(r) > 0 {
 		// Make sure that we return NOERROR if there were dynamic records for the domain
 		rcode = dns.RcodeSuccess
@@ -242,4 +250,32 @@ func (d *DNSServer) answerOwnChallenge(q dns.Question) ([]dns.RR, error) {
 	r.Hdr = dns.RR_Header{Name: q.Name, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 1}
 	r.Txt = append(r.Txt, d.PersonalKeyAuth)
 	return []dns.RR{r}, nil
+}
+
+func (d *DNSServer) answerManaged(q dns.Question) []dns.RR {
+	qtype := dns.TypeToString[q.Qtype]
+	if qtype == "" {
+		return nil
+	}
+	name := strings.ToLower(q.Name)
+	records, err := d.DB.ListRecords(qtype, name)
+	if err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Debug("Error querying managed records")
+		return nil
+	}
+	var rrs []dns.RR
+	for _, rec := range records {
+		value := rec.Value
+		if rec.Type == "TXT" || rec.Type == "CAA" {
+			value = `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+		}
+		rrStr := fmt.Sprintf("%s %d IN %s %s", rec.Name, rec.TTL, rec.Type, value)
+		rr, err := dns.NewRR(rrStr)
+		if err != nil {
+			log.WithFields(log.Fields{"error": err.Error(), "record": rrStr}).Warning("Could not parse managed RR")
+			continue
+		}
+		rrs = append(rrs, rr)
+	}
+	return rrs
 }

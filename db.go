@@ -17,7 +17,7 @@ import (
 )
 
 // DBVersion shows the database version this code uses. This is used for update checks.
-var DBVersion = 1
+var DBVersion = 2
 
 var acmeTable = `
 	CREATE TABLE IF NOT EXISTS acmedns(
@@ -47,6 +47,19 @@ var txtTablePG = `
 		Value   TEXT NOT NULL DEFAULT '',
 		LastUpdate INT
 	);`
+
+var dnsRecordsTable = `
+	CREATE TABLE IF NOT EXISTS dns_records (
+		id      TEXT PRIMARY KEY,
+		name    TEXT NOT NULL,
+		type    TEXT NOT NULL,
+		value   TEXT NOT NULL,
+		ttl     INTEGER NOT NULL DEFAULT 300,
+		created INTEGER NOT NULL
+	);`
+
+var dnsRecordsIndex = `
+	CREATE INDEX IF NOT EXISTS idx_dns_records_name_type ON dns_records (name, type);`
 
 // getSQLiteStmt replaces all PostgreSQL prepared statement placeholders (eg. $1, $2) with SQLite variant "?"
 func getSQLiteStmt(s string) string {
@@ -80,6 +93,8 @@ func (d *acmedb) Init(engine string, connection string) error {
 	} else {
 		_, _ = d.DB.Exec(txtTablePG)
 	}
+	_, _ = d.DB.Exec(dnsRecordsTable)
+	_, _ = d.DB.Exec(dnsRecordsIndex)
 	// If everything is fine, handle db upgrade tasks
 	if err == nil {
 		err = d.checkDBUpgrades(versionString)
@@ -110,6 +125,9 @@ func (d *acmedb) checkDBUpgrades(versionString string) error {
 func (d *acmedb) handleDBUpgrades(version int) error {
 	if version == 0 {
 		return d.handleDBUpgradeTo1()
+	}
+	if version == 1 {
+		return d.handleDBUpgradeTo2()
 	}
 	return nil
 }
@@ -163,6 +181,11 @@ func (d *acmedb) handleDBUpgradeTo1() error {
 		_, _ = tx.Exec("ALTER TABLE records DROP COLUMN IF EXISTS LastActive")
 	}
 	_, err = tx.Exec("UPDATE acmedns SET Value='1' WHERE Name='db_version'")
+	return err
+}
+
+func (d *acmedb) handleDBUpgradeTo2() error {
+	_, err := d.DB.Exec("UPDATE acmedns SET Value='2' WHERE Name='db_version'")
 	return err
 }
 
@@ -309,6 +332,95 @@ func (d *acmedb) Update(a ACMETxtPost) error {
 	_, err = sm.Exec(a.Value, timenow, a.Subdomain)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (d *acmedb) CreateRecord(rec DNSRecord) error {
+	d.Lock()
+	defer d.Unlock()
+	stmt := `INSERT INTO dns_records (id, name, type, value, ttl, created) VALUES ($1, $2, $3, $4, $5, $6)`
+	if Config.Database.Engine == "sqlite3" {
+		stmt = getSQLiteStmt(stmt)
+	}
+	_, err := d.DB.Exec(stmt, rec.ID, rec.Name, rec.Type, rec.Value, rec.TTL, rec.Created)
+	return err
+}
+
+func (d *acmedb) GetRecord(id string) (DNSRecord, error) {
+	d.Lock()
+	defer d.Unlock()
+	q := `SELECT id, name, type, value, ttl, created FROM dns_records WHERE id = $1`
+	if Config.Database.Engine == "sqlite3" {
+		q = getSQLiteStmt(q)
+	}
+	var r DNSRecord
+	err := d.DB.QueryRow(q, id).Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Created)
+	if err == sql.ErrNoRows {
+		return DNSRecord{}, sql.ErrNoRows
+	}
+	return r, err
+}
+
+func (d *acmedb) ListRecords(filterType, filterName string) ([]DNSRecord, error) {
+	d.Lock()
+	defer d.Unlock()
+	q := `SELECT id, name, type, value, ttl, created FROM dns_records WHERE ($1 = '' OR type = $2) AND ($3 = '' OR name = $4)`
+	if Config.Database.Engine == "sqlite3" {
+		q = getSQLiteStmt(q)
+	}
+	rows, err := d.DB.Query(q, filterType, filterType, filterName, filterName)
+	if err != nil {
+		return nil, err
+	}
+	defer closeRows(rows)
+	var records []DNSRecord
+	for rows.Next() {
+		var r DNSRecord
+		if err := rows.Scan(&r.ID, &r.Name, &r.Type, &r.Value, &r.TTL, &r.Created); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if records == nil {
+		records = []DNSRecord{}
+	}
+	return records, nil
+}
+
+func (d *acmedb) UpdateRecord(rec DNSRecord) error {
+	d.Lock()
+	defer d.Unlock()
+	stmt := `UPDATE dns_records SET name=$1, type=$2, value=$3, ttl=$4 WHERE id=$5`
+	if Config.Database.Engine == "sqlite3" {
+		stmt = getSQLiteStmt(stmt)
+	}
+	result, err := d.DB.Exec(stmt, rec.Name, rec.Type, rec.Value, rec.TTL, rec.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (d *acmedb) DeleteRecord(id string) error {
+	d.Lock()
+	defer d.Unlock()
+	stmt := `DELETE FROM dns_records WHERE id=$1`
+	if Config.Database.Engine == "sqlite3" {
+		stmt = getSQLiteStmt(stmt)
+	}
+	result, err := d.DB.Exec(stmt, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
 	}
 	return nil
 }
