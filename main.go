@@ -177,15 +177,17 @@ func setupAcme(cfg *acmedns.DNSConfig, dnsservers []*nameserver.DNSServer) *cert
 	provider := nameserver.NewChallengeProvider(dnsservers)
 
 	storage := certmagic.FileStorage{Path: cfg.API.ACMECacheDir}
+
+	var magic *certmagic.Config
 	cache := certmagic.NewCache(certmagic.CacheOptions{
 		GetConfigForCert: func(cert certmagic.Certificate) (*certmagic.Config, error) {
-			return &certmagic.Config{
-				DefaultServerName: cfg.General.Domain,
-				Storage:           &storage,
-			}, nil
+			return magic, nil
 		},
 	})
-	magic := certmagic.New(cache, certmagic.Config{})
+	magic = certmagic.New(cache, certmagic.Config{
+		DefaultServerName: cfg.General.Domain,
+		Storage:           &storage,
+	})
 	acme := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		CA:     ca,
 		Email:  cfg.API.NotificationEmail,
