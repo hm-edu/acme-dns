@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -12,23 +12,49 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/gavv/httpexpect/v2"
 	"github.com/google/uuid"
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
+	"github.com/hm-edu/acme-dns/pkg/database"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 )
 
-// noAuth function to write ACMETxt model to context while not preforming any validation
-func noAuth(update httprouter.Handle) httprouter.Handle {
+var testDB *database.AcmeDB
+var testConfig acmedns.DNSConfig
+
+func TestMain(m *testing.M) {
+	testDB = database.New()
+	_ = testDB.Init("sqlite3", ":memory:")
+
+	testConfig = acmedns.DNSConfig{
+		Database: acmedns.DatabaseSettings{
+			Engine:     "sqlite3",
+			Connection: ":memory:",
+		},
+		API: acmedns.APIConfig{
+			Domain:      "",
+			Port:        "8080",
+			TLS:         "none",
+			CorsOrigins: []string{"*"},
+			UseHeader:   false,
+			HeaderName:  "X-Forwarded-For",
+		},
+	}
+
+	m.Run()
+	testDB.Close()
+}
+
+// noAuth writes ACMETxt model to context without performing any validation
+func noAuth(a *API, update httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-		postData := ACMETxt{}
+		postData := acmedns.ACMETxt{}
 		uname := r.Header.Get("X-Api-User")
 		passwd := r.Header.Get("X-Api-Key")
 
 		dec := json.NewDecoder(r.Body)
 		_ = dec.Decode(&postData)
-		// Set user info to the decoded ACMETxt object
 		postData.Username, _ = uuid.Parse(uname)
 		postData.Password = passwd
-		// Set the ACMETxt struct to context to pull in from update function
 		ctx := r.Context()
 		ctx = context.WithValue(ctx, ACMETxtKey, postData)
 		r = r.WithContext(ctx)
@@ -48,37 +74,38 @@ func getExpect(t *testing.T, server *httptest.Server) *httpexpect.Expect {
 }
 
 func setupRouter(debug bool, noauth bool) http.Handler {
-	api := httprouter.New()
-	var dbcfg = dbsettings{
-		Engine:     "sqlite3",
-		Connection: ":memory:"}
-	var httpapicfg = httpapi{
-		Domain:      "",
-		Port:        "8080",
-		TLS:         "none",
-		CorsOrigins: []string{"*"},
-		UseHeader:   true,
-		HeaderName:  "X-Forwarded-For",
+	cfg := acmedns.DNSConfig{
+		Database: acmedns.DatabaseSettings{
+			Engine:     "sqlite3",
+			Connection: ":memory:",
+		},
+		API: acmedns.APIConfig{
+			Domain:      "",
+			Port:        "8080",
+			TLS:         "none",
+			CorsOrigins: []string{"*"},
+			UseHeader:   true,
+			HeaderName:  "X-Forwarded-For",
+		},
 	}
-	var dnscfg = DNSConfig{
-		API:      httpapicfg,
-		Database: dbcfg,
-	}
-	Config = dnscfg
+
+	a := &API{Config: &cfg, DB: testDB}
+
+	router := httprouter.New()
 	c := cors.New(cors.Options{
-		AllowedOrigins:     Config.API.CorsOrigins,
+		AllowedOrigins:     cfg.API.CorsOrigins,
 		AllowedMethods:     []string{"GET", "POST"},
 		OptionsPassthrough: false,
-		Debug:              Config.General.Debug,
+		Debug:              debug,
 	})
-	api.POST("/register", webRegisterPost)
-	api.GET("/health", healthCheck)
+	router.POST("/register", a.RegisterPost)
+	router.GET("/health", HealthCheck)
 	if noauth {
-		api.POST("/update", noAuth(webUpdatePost))
+		router.POST("/update", noAuth(a, a.UpdatePost))
 	} else {
-		api.POST("/update", Auth(webUpdatePost))
+		router.POST("/update", a.Auth(a.UpdatePost))
 	}
-	return c.Handler(api)
+	return c.Handler(router)
 }
 
 func TestApiRegister(t *testing.T) {
@@ -132,7 +159,6 @@ func TestApiRegisterBadAllowFrom(t *testing.T) {
 	}
 
 	for _, v := range invalidVals {
-
 		allowfrom := map[string][]interface{}{
 			"allowfrom": {v}}
 
@@ -179,9 +205,9 @@ func TestApiRegisterWithMockDB(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
-	oldDb := DB.GetBackend()
+	oldDb := testDB.GetBackend()
 	db, mock, _ := sqlmock.New()
-	DB.SetBackend(db)
+	testDB.SetBackend(db)
 	defer func(db *sql.DB) {
 		_ = db.Close()
 	}(db)
@@ -191,7 +217,7 @@ func TestApiRegisterWithMockDB(t *testing.T) {
 		Status(http.StatusInternalServerError).
 		JSON().Object().
 		ContainsKey("error")
-	DB.SetBackend(oldDb)
+	testDB.SetBackend(oldDb)
 }
 
 func TestApiUpdateWithInvalidSubdomain(t *testing.T) {
@@ -205,7 +231,7 @@ func TestApiUpdateWithInvalidSubdomain(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
-	newUser, err := DB.Register(cidrslice{})
+	newUser, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not create new user, got error [%v]", err)
 	}
@@ -235,7 +261,7 @@ func TestApiUpdateWithInvalidTxt(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
-	newUser, err := DB.Register(cidrslice{})
+	newUser, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not create new user, got error [%v]", err)
 	}
@@ -277,7 +303,7 @@ func TestApiUpdateWithCredentials(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
-	newUser, err := DB.Register(cidrslice{})
+	newUser, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not create new user, got error [%v]", err)
 	}
@@ -310,9 +336,9 @@ func TestApiUpdateWithCredentialsMockDB(t *testing.T) {
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
-	oldDb := DB.GetBackend()
+	oldDb := testDB.GetBackend()
 	db, mock, _ := sqlmock.New()
-	DB.SetBackend(db)
+	testDB.SetBackend(db)
 	defer func(db *sql.DB) {
 		_ = db.Close()
 	}(db)
@@ -324,7 +350,7 @@ func TestApiUpdateWithCredentialsMockDB(t *testing.T) {
 		Status(http.StatusInternalServerError).
 		JSON().Object().
 		ContainsKey("error")
-	DB.SetBackend(oldDb)
+	testDB.SetBackend(oldDb)
 }
 
 func TestApiManyUpdateWithCredentials(t *testing.T) {
@@ -335,20 +361,19 @@ func TestApiManyUpdateWithCredentials(t *testing.T) {
 	defer server.Close()
 	e := getExpect(t, server)
 	// User without defined CIDR masks
-	newUser, err := DB.Register(cidrslice{})
+	newUser, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not create new user, got error [%v]", err)
 	}
 
 	// User with defined allow from - CIDR masks, all invalid
-	// (httpexpect doesn't provide a way to mock remote ip)
-	newUserWithCIDR, err := DB.Register(cidrslice{"192.168.1.1/32", "invalid"})
+	newUserWithCIDR, err := testDB.Register(acmedns.CIDRSlice{"192.168.1.1/32", "invalid"})
 	if err != nil {
 		t.Errorf("Could not create new user with CIDR, got error [%v]", err)
 	}
 
 	// Another user with valid CIDR mask to match the httpexpect default
-	newUserWithValidCIDR, err := DB.Register(cidrslice{"10.1.2.3/32", "invalid"})
+	newUserWithValidCIDR, err := testDB.Register(acmedns.CIDRSlice{"10.1.2.3/32", "invalid"})
 	if err != nil {
 		t.Errorf("Could not create new user with a valid CIDR, got error [%v]", err)
 	}
@@ -385,31 +410,32 @@ func TestApiManyUpdateWithCredentials(t *testing.T) {
 }
 
 func TestApiManyUpdateWithIpCheckHeaders(t *testing.T) {
-
 	router := setupRouter(false, false)
 	server := httptest.NewServer(router)
 	defer server.Close()
 	e := getExpect(t, server)
+
 	// Use header checks from default header (X-Forwarded-For)
-	Config.API.UseHeader = true
+	testConfig.API.UseHeader = true
+
 	// User without defined CIDR masks
-	newUser, err := DB.Register(cidrslice{})
+	newUser, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not create new user, got error [%v]", err)
 	}
 
-	newUserWithCIDR, err := DB.Register(cidrslice{"192.168.1.2/32", "invalid"})
+	newUserWithCIDR, err := testDB.Register(acmedns.CIDRSlice{"192.168.1.2/32", "invalid"})
 	if err != nil {
 		t.Errorf("Could not create new user with CIDR, got error [%v]", err)
 	}
 
-	newUserWithIP6CIDR, err := DB.Register(cidrslice{"2002:c0a8::0/32"})
+	newUserWithIP6CIDR, err := testDB.Register(acmedns.CIDRSlice{"2002:c0a8::0/32"})
 	if err != nil {
 		t.Errorf("Could not create a new user with IP6 CIDR, got error [%v]", err)
 	}
 
 	for _, test := range []struct {
-		user        ACMETxt
+		user        acmedns.ACMETxt
 		headerValue string
 		status      int
 	}{
@@ -433,7 +459,7 @@ func TestApiManyUpdateWithIpCheckHeaders(t *testing.T) {
 			Expect().
 			Status(test.status)
 	}
-	Config.API.UseHeader = false
+	testConfig.API.UseHeader = false
 }
 
 func TestApiHealthCheck(t *testing.T) {
@@ -442,4 +468,35 @@ func TestApiHealthCheck(t *testing.T) {
 	defer server.Close()
 	e := getExpect(t, server)
 	e.GET("/health").Expect().Status(http.StatusOK)
+}
+
+func TestUpdateAllowedFromIP(t *testing.T) {
+	cfg := acmedns.DNSConfig{}
+	cfg.API.UseHeader = false
+	a := &API{Config: &cfg, DB: testDB}
+
+	userWithAllow := acmedns.NewACMETxt()
+	userWithAllow.AllowFrom = acmedns.CIDRSlice{"192.168.1.2/32", "[::1]/128"}
+	userWithoutAllow := acmedns.NewACMETxt()
+
+	for i, test := range []struct {
+		remoteaddr string
+		expected   bool
+	}{
+		{"192.168.1.2:1234", true},
+		{"192.168.1.1:1234", false},
+		{"invalid", false},
+		{"[::1]:4567", true},
+	} {
+		newreq, _ := http.NewRequest("GET", "/whatever", nil)
+		newreq.RemoteAddr = test.remoteaddr
+		ret := a.updateAllowedFromIP(newreq, userWithAllow)
+		if test.expected != ret {
+			t.Errorf("Test %d: Unexpected result for user with allowForm set", i)
+		}
+
+		if !a.updateAllowedFromIP(newreq, userWithoutAllow) {
+			t.Errorf("Test %d: Unexpected result for user without allowForm set", i)
+		}
+	}
 }

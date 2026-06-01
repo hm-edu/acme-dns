@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -7,23 +7,24 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
 	"github.com/julienschmidt/httprouter"
 	log "github.com/sirupsen/logrus"
 )
 
-type key int
+type contextKey int
 
-// ACMETxtKey is a context key for ACMETxt struct
-const ACMETxtKey key = 0
+// ACMETxtKey is the context key for ACMETxt values
+const ACMETxtKey contextKey = 0
 
-// Auth middleware for update request
-func Auth(update httprouter.Handle) httprouter.Handle {
+// Auth is the authentication middleware for update requests
+func (a *API) Auth(update httprouter.Handle) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-		postData := ACMETxt{}
+		postData := acmedns.ACMETxt{}
 		userOK := false
-		user, err := getUserFromRequest(r)
+		user, err := a.getUserFromRequest(r)
 		if err == nil {
-			if updateAllowedFromIP(r, user) {
+			if a.updateAllowedFromIP(r, user) {
 				dec := json.NewDecoder(r.Body)
 				err = dec.Decode(&postData)
 				if err != nil {
@@ -41,53 +42,50 @@ func Auth(update httprouter.Handle) httprouter.Handle {
 			log.WithFields(log.Fields{"error": err.Error()}).Error("Error while trying to get user")
 		}
 		if userOK {
-			// Set user info to the decoded ACMETxt object
 			postData.Username = user.Username
 			postData.Password = user.Password
-			// Set the ACMETxt struct to context to pull in from update function
 			ctx := context.WithValue(r.Context(), ACMETxtKey, postData)
 			update(w, r.WithContext(ctx), p)
 		} else {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write(jsonError("forbidden"))
+			_, _ = w.Write(acmedns.JsonError("forbidden"))
 		}
 	}
 }
 
-func getUserFromRequest(r *http.Request) (ACMETxt, error) {
+func (a *API) getUserFromRequest(r *http.Request) (acmedns.ACMETxt, error) {
 	uname := r.Header.Get("X-Api-User")
 	passwd := r.Header.Get("X-Api-Key")
-	username, err := getValidUsername(uname)
+	username, err := acmedns.GetValidUsername(uname)
 	if err != nil {
-		return ACMETxt{}, fmt.Errorf("invalid username: %s: %s", uname, err.Error())
+		return acmedns.ACMETxt{}, fmt.Errorf("invalid username: %s: %s", uname, err.Error())
 	}
-	if validKey(passwd) {
-		dbuser, err := DB.GetByUsername(username)
+	if acmedns.ValidKey(passwd) {
+		dbuser, err := a.DB.GetByUsername(username)
 		if err != nil {
 			log.WithFields(log.Fields{"error": err.Error()}).Error("Error while trying to get user")
-			// To protect against timed side channel (never gonna give you up)
-			correctPassword(passwd, "$2a$10$8JEFVNYYhLoBysjAxe2yBuXrkDojBQBkVpXEQgyQyjn43SvJ4vL36")
-
-			return ACMETxt{}, fmt.Errorf("invalid username: %s", uname)
+			// Protect against timed side channel
+			acmedns.CorrectPassword(passwd, "$2a$10$8JEFVNYYhLoBysjAxe2yBuXrkDojBQBkVpXEQgyQyjn43SvJ4vL36")
+			return acmedns.ACMETxt{}, fmt.Errorf("invalid username: %s", uname)
 		}
-		if correctPassword(passwd, dbuser.Password) {
+		if acmedns.CorrectPassword(passwd, dbuser.Password) {
 			return dbuser, nil
 		}
-		return ACMETxt{}, fmt.Errorf("invalid password for user %s", uname)
+		return acmedns.ACMETxt{}, fmt.Errorf("invalid password for user %s", uname)
 	}
-	return ACMETxt{}, fmt.Errorf("invalid key for user %s", uname)
+	return acmedns.ACMETxt{}, fmt.Errorf("invalid key for user %s", uname)
 }
 
-func updateAllowedFromIP(r *http.Request, user ACMETxt) bool {
-	if Config.API.UseHeader {
-		ips := getIPListFromHeader(r.Header.Get(Config.API.HeaderName))
-		return user.allowedFromList(ips)
+func (a *API) updateAllowedFromIP(r *http.Request, user acmedns.ACMETxt) bool {
+	if a.Config.API.UseHeader {
+		ips := acmedns.GetIPListFromHeader(r.Header.Get(a.Config.API.HeaderName))
+		return user.AllowedFromList(ips)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error(), "remoteaddr": r.RemoteAddr}).Error("Error while parsing remote address")
 		host = ""
 	}
-	return user.allowedFrom(host)
+	return user.AllowedFrom(host)
 }

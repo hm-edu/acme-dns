@@ -16,24 +16,28 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	legolog "github.com/go-acme/lego/v4/log"
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
+	httpapi "github.com/hm-edu/acme-dns/pkg/api"
+	"github.com/hm-edu/acme-dns/pkg/database"
+	"github.com/hm-edu/acme-dns/pkg/nameserver"
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	// Created files are not world writable
 	syscall.Umask(0077)
 	configPtr := flag.String("c", "/etc/acme-dns/config.cfg", "config file location")
 	flag.Parse()
-	// Read global config
+
 	var err error
-	if fileIsAccessible(*configPtr) {
+	var cfg acmedns.DNSConfig
+	if acmedns.FileIsAccessible(*configPtr) {
 		log.WithFields(log.Fields{"file": *configPtr}).Info("Using config file")
-		Config, err = readConfig(*configPtr)
-	} else if fileIsAccessible("./config.cfg") {
+		cfg, err = acmedns.ReadConfig(*configPtr)
+	} else if acmedns.FileIsAccessible("./config.cfg") {
 		log.WithFields(log.Fields{"file": "./config.cfg"}).Info("Using config file")
-		Config, err = readConfig("./config.cfg")
+		cfg, err = acmedns.ReadConfig("./config.cfg")
 	} else {
 		log.Errorf("Configuration file not found.")
 		os.Exit(1)
@@ -43,57 +47,49 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLogging(Config.Logconfig.Format, Config.Logconfig.Level)
+	acmedns.SetupLogging(cfg.Logconfig.Format, cfg.Logconfig.Level)
 
-	// Open database
-	newDB := new(acmedb)
-	err = newDB.Init(Config.Database.Engine, Config.Database.Connection)
+	db := database.New()
+	err = db.Init(cfg.Database.Engine, cfg.Database.Connection)
 	if err != nil {
 		log.Errorf("Could not open database [%v]", err)
 		os.Exit(1)
 	} else {
 		log.Info("Connected to database")
 	}
-	DB = newDB
-	defer DB.Close()
+	defer db.Close()
 
-	// Error channel for servers
 	errChan := make(chan error, 1)
 
-	// DNS server
-	dnsservers := make([]*DNSServer, 0)
-	if strings.HasPrefix(Config.General.Proto, "both") {
-		// Handle the case where DNS server should be started for both udp and tcp
+	dnsservers := make([]*nameserver.DNSServer, 0)
+	if strings.HasPrefix(cfg.General.Proto, "both") {
 		udpProto := "udp"
 		tcpProto := "tcp"
-		if strings.HasSuffix(Config.General.Proto, "4") {
+		if strings.HasSuffix(cfg.General.Proto, "4") {
 			udpProto += "4"
 			tcpProto += "4"
-		} else if strings.HasSuffix(Config.General.Proto, "6") {
+		} else if strings.HasSuffix(cfg.General.Proto, "6") {
 			udpProto += "6"
 			tcpProto += "6"
 		}
-		dnsServerUDP := NewDNSServer(DB, Config.General.Listen, udpProto, Config.General.Domain)
+		dnsServerUDP := nameserver.New(db, cfg.General.Listen, udpProto, cfg.General.Domain)
 		dnsservers = append(dnsservers, dnsServerUDP)
-		dnsServerUDP.ParseRecords(Config)
-		dnsServerTCP := NewDNSServer(DB, Config.General.Listen, tcpProto, Config.General.Domain)
+		dnsServerUDP.ParseRecords(cfg)
+		dnsServerTCP := nameserver.New(db, cfg.General.Listen, tcpProto, cfg.General.Domain)
 		dnsservers = append(dnsservers, dnsServerTCP)
-		// No need to parse records from config again
 		dnsServerTCP.Domains = dnsServerUDP.Domains
 		dnsServerTCP.SOA = dnsServerUDP.SOA
 		go dnsServerUDP.Start(errChan)
 		go dnsServerTCP.Start(errChan)
 	} else {
-		dnsServer := NewDNSServer(DB, Config.General.Listen, Config.General.Proto, Config.General.Domain)
+		dnsServer := nameserver.New(db, cfg.General.Listen, cfg.General.Proto, cfg.General.Domain)
 		dnsservers = append(dnsservers, dnsServer)
-		dnsServer.ParseRecords(Config)
+		dnsServer.ParseRecords(cfg)
 		go dnsServer.Start(errChan)
 	}
 
-	// HTTP API
-	go startHTTPAPI(errChan, Config, dnsservers)
+	go startHTTPAPI(errChan, &cfg, db, dnsservers)
 
-	// block waiting for error
 	for {
 		err = <-errChan
 		if err != nil {
@@ -102,106 +98,101 @@ func main() {
 	}
 }
 
-func startHTTPAPI(errChan chan error, config DNSConfig, dnsservers []*DNSServer) {
-	// Setup http logger
+func startHTTPAPI(errChan chan error, cfg *acmedns.DNSConfig, db acmedns.Database, dnsservers []*nameserver.DNSServer) {
 	logger := log.New()
 	logwriter := logger.Writer()
 	defer func(logwriter *io.PipeWriter) {
 		_ = logwriter.Close()
 	}(logwriter)
-	// Setup logging for different dependencies to log with logrus
-	// Certmagic
 	stdlog.SetOutput(logwriter)
-	// Lego
 	legolog.Logger = logger
 
-	api := httprouter.New()
+	router := httprouter.New()
 	c := cors.New(cors.Options{
-		AllowedOrigins:     Config.API.CorsOrigins,
+		AllowedOrigins:     cfg.API.CorsOrigins,
 		AllowedMethods:     []string{"GET", "POST"},
 		OptionsPassthrough: false,
-		Debug:              Config.General.Debug,
+		Debug:              cfg.General.Debug,
 	})
-	if Config.General.Debug {
-		// Logwriter for saner log output
+	if cfg.General.Debug {
 		c.Log = stdlog.New(logwriter, "", 0)
 	}
-	if !Config.API.DisableRegistration {
-		api.POST("/register", webRegisterPost)
+
+	a := &httpapi.API{Config: cfg, DB: db}
+
+	if !cfg.API.DisableRegistration {
+		router.POST("/register", a.RegisterPost)
 	}
-	api.POST("/update", Auth(webUpdatePost))
-	api.GET("/health", healthCheck)
+	router.POST("/update", a.Auth(a.UpdatePost))
+	router.GET("/health", httpapi.HealthCheck)
 
-	host := Config.API.IP + ":" + Config.API.Port
+	host := cfg.API.IP + ":" + cfg.API.Port
 
-	// TLS specific general settings
-	cfg := &tls.Config{
+	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
 
 	var err error
-	switch Config.API.TLS {
+	switch cfg.API.TLS {
 	case "letsencryptstaging", "letsencrypt":
-
-		magic := setupAcme(dnsservers)
-
-		err = magic.ManageSync(context.Background(), []string{Config.General.Domain})
+		magic := setupAcme(cfg, dnsservers)
+		err = magic.ManageSync(context.Background(), []string{cfg.General.Domain})
 		if err != nil {
 			errChan <- err
 			return
 		}
-		cfg.GetCertificate = magic.GetCertificate
+		tlsCfg.GetCertificate = magic.GetCertificate
 		srv := &http.Server{
 			Addr:      host,
-			Handler:   c.Handler(api),
-			TLSConfig: cfg,
+			Handler:   c.Handler(router),
+			TLSConfig: tlsCfg,
 			ErrorLog:  stdlog.New(logwriter, "", 0),
 		}
-		log.WithFields(log.Fields{"host": host, "domain": Config.General.Domain}).Info("Listening HTTPS")
+		log.WithFields(log.Fields{"host": host, "domain": cfg.General.Domain}).Info("Listening HTTPS")
 		err = srv.ListenAndServeTLS("", "")
 	case "cert":
 		srv := &http.Server{
 			Addr:      host,
-			Handler:   c.Handler(api),
-			TLSConfig: cfg,
+			Handler:   c.Handler(router),
+			TLSConfig: tlsCfg,
 			ErrorLog:  stdlog.New(logwriter, "", 0),
 		}
 		log.WithFields(log.Fields{"host": host}).Info("Listening HTTPS")
-		err = srv.ListenAndServeTLS(Config.API.TLSCertFullchain, Config.API.TLSCertPrivkey)
+		err = srv.ListenAndServeTLS(cfg.API.TLSCertFullchain, cfg.API.TLSCertPrivkey)
 	default:
 		log.WithFields(log.Fields{"host": host}).Info("Listening HTTP")
-		err = http.ListenAndServe(host, c.Handler(api))
+		err = http.ListenAndServe(host, c.Handler(router))
 	}
 	if err != nil {
 		errChan <- err
 	}
 }
 
-func setupAcme(dnsservers []*DNSServer) *certmagic.Config {
+func setupAcme(cfg *acmedns.DNSConfig, dnsservers []*nameserver.DNSServer) *certmagic.Config {
 	ca := certmagic.LetsEncryptStagingCA
-
-	if Config.API.TLS == "letsencrypt" {
+	if cfg.API.TLS == "letsencrypt" {
 		ca = certmagic.LetsEncryptProductionCA
 	}
 
-	provider := NewChallengeProvider(dnsservers)
+	provider := nameserver.NewChallengeProvider(dnsservers)
 
-	storage := certmagic.FileStorage{Path: Config.API.ACMECacheDir}
+	storage := certmagic.FileStorage{Path: cfg.API.ACMECacheDir}
 	cache := certmagic.NewCache(certmagic.CacheOptions{
 		GetConfigForCert: func(cert certmagic.Certificate) (*certmagic.Config, error) {
 			return &certmagic.Config{
-				DefaultServerName: Config.General.Domain,
-				Storage:           &storage}, nil
+				DefaultServerName: cfg.General.Domain,
+				Storage:           &storage,
+			}, nil
 		},
 	})
 	magic := certmagic.New(cache, certmagic.Config{})
 	acme := certmagic.NewACMEIssuer(magic, certmagic.ACMEIssuer{
 		CA:     ca,
-		Email:  Config.API.NotificationEmail,
+		Email:  cfg.API.NotificationEmail,
 		Agreed: true,
 		DNS01Solver: &certmagic.DNS01Solver{DNSManager: certmagic.DNSManager{
 			DNSProvider: &provider,
-			Resolvers:   Config.General.Resolvers,
+			Resolvers:   cfg.General.Resolvers,
 		}},
 		DisableHTTPChallenge:    true,
 		DisableTLSALPNChallenge: true,

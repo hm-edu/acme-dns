@@ -1,4 +1,4 @@
-package main
+package acmedns
 
 import (
 	"testing"
@@ -18,7 +18,7 @@ func TestGetValidUsername(t *testing.T) {
 		{"", uuid.UUID{}, true},
 		{"&!#!25123!%!'%", uuid.UUID{}, true},
 	} {
-		ret, err := getValidUsername(test.uname)
+		ret, err := GetValidUsername(test.uname)
 		if test.shouldErr && err == nil {
 			t.Errorf("Test %d: Expected error, but there was none", i)
 		}
@@ -42,7 +42,7 @@ func TestValidKey(t *testing.T) {
 		{"aaaaaaaa-aaa-aaaaaa#aaaaaaaa-aaa_aacaaaa", false},
 		{"aaaaaaaa-aaa-aaaaaa-aaaaaaaa-aaa_aacaaaaa", false},
 	} {
-		ret := validKey(test.key)
+		ret := ValidKey(test.key)
 		if ret != test.output {
 			t.Errorf("Test %d: Expected return value %t, but got %t", i, test.output, ret)
 		}
@@ -61,7 +61,7 @@ func TestGetValidSubdomain(t *testing.T) {
 		{"", false},
 		{"&!#!25123!%!'%", false},
 	} {
-		ret := validSubdomain(test.subdomain)
+		ret := ValidSubdomain(test.subdomain)
 		if ret != test.output {
 			t.Errorf("Test %d: Expected return value %t, but got %t", i, test.output, ret)
 		}
@@ -79,7 +79,7 @@ func TestValidTXT(t *testing.T) {
 		{"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", false},
 		{"", false},
 	} {
-		ret := validTXT(test.txt)
+		ret := ValidTXT(test.txt)
 		if ret != test.output {
 			t.Errorf("Test %d: Expected return value %t, but got %t", i, test.output, ret)
 		}
@@ -103,7 +103,7 @@ func TestCorrectPassword(t *testing.T) {
 			false},
 		{"", "", false},
 	} {
-		ret := correctPassword(test.pw, test.hash)
+		ret := CorrectPassword(test.pw, test.hash)
 		if ret != test.output {
 			t.Errorf("Test %d: Expected return value %t, but got %t", i, test.output, ret)
 		}
@@ -112,17 +112,17 @@ func TestCorrectPassword(t *testing.T) {
 
 func TestGetValidCIDRMasks(t *testing.T) {
 	for i, test := range []struct {
-		input  cidrslice
-		output cidrslice
+		input  CIDRSlice
+		output CIDRSlice
 	}{
-		{cidrslice{"10.0.0.1/24"}, cidrslice{"10.0.0.1/24"}},
-		{cidrslice{"invalid", "127.0.0.1/32"}, cidrslice{"127.0.0.1/32"}},
-		{cidrslice{"2002:c0a8::0/32", "8.8.8.8/32"}, cidrslice{"2002:c0a8::0/32", "8.8.8.8/32"}},
+		{CIDRSlice{"10.0.0.1/24"}, CIDRSlice{"10.0.0.1/24"}},
+		{CIDRSlice{"invalid", "127.0.0.1/32"}, CIDRSlice{"127.0.0.1/32"}},
+		{CIDRSlice{"2002:c0a8::0/32", "8.8.8.8/32"}, CIDRSlice{"2002:c0a8::0/32", "8.8.8.8/32"}},
 	} {
 		ret := test.input.ValidEntries()
 		if len(ret) == len(test.output) {
-			for i, v := range ret {
-				if v != test.output[i] {
+			for j, v := range ret {
+				if v != test.output[j] {
 					t.Errorf("Test %d: Expected %q but got %q", i, test.output, ret)
 				}
 			}

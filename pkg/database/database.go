@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -6,17 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
-	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// DBVersion shows the database version this code uses. This is used for update checks.
+// DBVersion shows the database version this code uses
 var DBVersion = 1
 
 var acmeTable = `
@@ -48,21 +49,35 @@ var txtTablePG = `
 		LastUpdate INT
 	);`
 
-// getSQLiteStmt replaces all PostgreSQL prepared statement placeholders (eg. $1, $2) with SQLite variant "?"
+// AcmeDB implements acmedns.Database using SQL
+type AcmeDB struct {
+	sync.Mutex
+	DB     *sql.DB
+	engine string
+}
+
+// New returns a new empty AcmeDB
+func New() *AcmeDB {
+	return &AcmeDB{}
+}
+
+// getSQLiteStmt replaces PostgreSQL placeholders with SQLite variant
 func getSQLiteStmt(s string) string {
 	re, _ := regexp.Compile(`\$[0-9]`)
 	return re.ReplaceAllString(s, "?")
 }
 
-func (d *acmedb) Init(engine string, connection string) error {
+// Init opens the database and runs migrations
+func (d *AcmeDB) Init(engine string, connection string) error {
 	d.Lock()
 	defer d.Unlock()
+	d.engine = engine
 	db, err := sql.Open(engine, connection)
 	if err != nil {
 		return err
 	}
 	d.DB = db
-	// Check version first to try to catch old versions without version string
+
 	var versionString string
 	_ = d.DB.QueryRow("SELECT Value FROM acmedns WHERE Name='db_version'").Scan(&versionString)
 	if versionString == "" {
@@ -76,18 +91,16 @@ func (d *acmedb) Init(engine string, connection string) error {
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("Error creating records table")
 	}
-	if Config.Database.Engine == "sqlite3" {
+	if d.engine == "sqlite3" {
 		_, err = d.DB.Exec(txtTable)
 	} else {
 		_, err = d.DB.Exec(txtTablePG)
 	}
-	// If everything is fine, handle db upgrade tasks
 	if err == nil {
 		err = d.checkDBUpgrades(versionString)
 	}
 	if err == nil {
 		if versionString == "0" {
-			// No errors so we should now be in version 1
 			insversion := fmt.Sprintf("INSERT INTO acmedns (Name, Value) values('db_version', '%d')", DBVersion)
 			_, err = db.Exec(insversion)
 		}
@@ -95,9 +108,9 @@ func (d *acmedb) Init(engine string, connection string) error {
 	return err
 }
 
-func (d *acmedb) checkDBUpgrades(versionString string) error {
-	var err error
-	version, err := strconv.Atoi(versionString)
+func (d *AcmeDB) checkDBUpgrades(versionString string) error {
+	version := 0
+	_, err := fmt.Sscan(versionString, &version)
 	if err != nil {
 		return err
 	}
@@ -105,17 +118,16 @@ func (d *acmedb) checkDBUpgrades(versionString string) error {
 		return d.handleDBUpgrades(version)
 	}
 	return nil
-
 }
 
-func (d *acmedb) handleDBUpgrades(version int) error {
+func (d *AcmeDB) handleDBUpgrades(version int) error {
 	if version == 0 {
 		return d.handleDBUpgradeTo1()
 	}
 	return nil
 }
 
-func (d *acmedb) handleDBUpgradeTo1() error {
+func (d *AcmeDB) handleDBUpgradeTo1() error {
 	var err error
 	var subdomains []string
 	rows, err := d.DB.Query("SELECT Subdomain FROM records")
@@ -141,7 +153,6 @@ func (d *acmedb) handleDBUpgradeTo1() error {
 		return err
 	}
 	tx, err := d.DB.Begin()
-	// Rollback if errored, commit if not
 	defer func() {
 		if err != nil {
 			_ = tx.Rollback()
@@ -152,16 +163,14 @@ func (d *acmedb) handleDBUpgradeTo1() error {
 	_, _ = tx.Exec("DELETE FROM txt")
 	for _, subdomain := range subdomains {
 		if subdomain != "" {
-			// Insert two rows for each subdomain to txt table
-			err = d.NewTXTValuesInTransaction(tx, subdomain)
+			err = d.newTXTValuesInTransaction(tx, subdomain)
 			if err != nil {
 				log.WithFields(log.Fields{"error": err.Error()}).Error("Error in DB upgrade while inserting values")
 				return err
 			}
 		}
 	}
-	// SQLite doesn't support dropping columns
-	if Config.Database.Engine != "sqlite3" {
+	if d.engine != "sqlite3" {
 		_, _ = tx.Exec("ALTER TABLE records DROP COLUMN IF EXISTS Value")
 		_, _ = tx.Exec("ALTER TABLE records DROP COLUMN IF EXISTS LastActive")
 	}
@@ -169,8 +178,7 @@ func (d *acmedb) handleDBUpgradeTo1() error {
 	return err
 }
 
-// Create two rows for subdomain to the txt table
-func (d *acmedb) NewTXTValuesInTransaction(tx *sql.Tx, subdomain string) error {
+func (d *AcmeDB) newTXTValuesInTransaction(tx *sql.Tx, subdomain string) error {
 	var err error
 	instr := fmt.Sprintf("INSERT INTO txt (Subdomain, LastUpdate) values('%s', 0)", subdomain)
 	_, _ = tx.Exec(instr)
@@ -178,12 +186,12 @@ func (d *acmedb) NewTXTValuesInTransaction(tx *sql.Tx, subdomain string) error {
 	return err
 }
 
-func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
+// Register creates a new user record with the provided CIDR allowlist
+func (d *AcmeDB) Register(afrom acmedns.CIDRSlice) (acmedns.ACMETxt, error) {
 	d.Lock()
 	defer d.Unlock()
 	var err error
 	tx, err := d.DB.Begin()
-	// Rollback if errored, commit if not
 	defer func() {
 		if err != nil {
 			_ = tx.Rollback()
@@ -191,8 +199,8 @@ func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
 		}
 		_ = tx.Commit()
 	}()
-	a := newACMETxt()
-	a.AllowFrom = cidrslice(afrom.ValidEntries())
+	a := acmedns.NewACMETxt()
+	a.AllowFrom = acmedns.CIDRSlice(afrom.ValidEntries())
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(a.Password), 10)
 	regSQL := `
     INSERT INTO records(
@@ -201,7 +209,7 @@ func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
         Subdomain,
 		AllowFrom) 
         values($1, $2, $3, $4)`
-	if Config.Database.Engine == "sqlite3" {
+	if d.engine == "sqlite3" {
 		regSQL = getSQLiteStmt(regSQL)
 	}
 	sm, err := tx.Prepare(regSQL)
@@ -214,62 +222,63 @@ func (d *acmedb) Register(afrom cidrslice) (ACMETxt, error) {
 	}(sm)
 	_, err = sm.Exec(a.Username.String(), passwordHash, a.Subdomain, a.AllowFrom.JSON())
 	if err == nil {
-		err = d.NewTXTValuesInTransaction(tx, a.Subdomain)
+		err = d.newTXTValuesInTransaction(tx, a.Subdomain)
 	}
 	return a, err
 }
 
-func (d *acmedb) GetByUsername(u uuid.UUID) (ACMETxt, error) {
+// GetByUsername retrieves a user record by UUID
+func (d *AcmeDB) GetByUsername(u uuid.UUID) (acmedns.ACMETxt, error) {
 	d.Lock()
 	defer d.Unlock()
-	var results []ACMETxt
+	var results []acmedns.ACMETxt
 	getSQL := `
 	SELECT Username, Password, Subdomain, AllowFrom
 	FROM records
 	WHERE Username=$1 LIMIT 1
 	`
-	if Config.Database.Engine == "sqlite3" {
+	if d.engine == "sqlite3" {
 		getSQL = getSQLiteStmt(getSQL)
 	}
 
 	sm, err := d.DB.Prepare(getSQL)
 	if err != nil {
-		return ACMETxt{}, err
+		return acmedns.ACMETxt{}, err
 	}
 	defer func(sm *sql.Stmt) {
 		_ = sm.Close()
 	}(sm)
 	rows, err := sm.Query(u.String())
 	if err != nil {
-		return ACMETxt{}, err
+		return acmedns.ACMETxt{}, err
 	}
 	defer func(rows *sql.Rows) {
 		_ = rows.Close()
 	}(rows)
 
-	// It will only be one row though
 	for rows.Next() {
 		txt, err := getModelFromRow(rows)
 		if err != nil {
-			return ACMETxt{}, err
+			return acmedns.ACMETxt{}, err
 		}
 		results = append(results, txt)
 	}
 	if len(results) > 0 {
 		return results[0], nil
 	}
-	return ACMETxt{}, errors.New("no user")
+	return acmedns.ACMETxt{}, errors.New("no user")
 }
 
-func (d *acmedb) GetTXTForDomain(domain string) ([]string, error) {
+// GetTXTForDomain retrieves TXT records for a subdomain
+func (d *AcmeDB) GetTXTForDomain(domain string) ([]string, error) {
 	d.Lock()
 	defer d.Unlock()
-	domain = sanitizeString(domain)
+	domain = acmedns.SanitizeString(domain)
 	var txts []string
 	getSQL := `
 	SELECT Value FROM txt WHERE Subdomain=$1 LIMIT 2
 	`
-	if Config.Database.Engine == "sqlite3" {
+	if d.engine == "sqlite3" {
 		getSQL = getSQLiteStmt(getSQL)
 	}
 
@@ -299,11 +308,11 @@ func (d *acmedb) GetTXTForDomain(domain string) ([]string, error) {
 	return txts, nil
 }
 
-func (d *acmedb) Update(a ACMETxtPost) error {
+// Update updates the TXT value for a subdomain
+func (d *AcmeDB) Update(a acmedns.ACMETxtPost) error {
 	d.Lock()
 	defer d.Unlock()
 	var err error
-	// Data in a is already sanitized
 	timenow := time.Now().Unix()
 
 	updSQL := `
@@ -311,7 +320,7 @@ func (d *acmedb) Update(a ACMETxtPost) error {
 	WHERE rowid=(
 		SELECT rowid FROM txt WHERE Subdomain=$3 ORDER BY LastUpdate LIMIT 1)
 	`
-	if Config.Database.Engine == "sqlite3" {
+	if d.engine == "sqlite3" {
 		updSQL = getSQLiteStmt(updSQL)
 	}
 
@@ -329,8 +338,8 @@ func (d *acmedb) Update(a ACMETxtPost) error {
 	return nil
 }
 
-func getModelFromRow(r *sql.Rows) (ACMETxt, error) {
-	txt := ACMETxt{}
+func getModelFromRow(r *sql.Rows) (acmedns.ACMETxt, error) {
+	txt := acmedns.ACMETxt{}
 	afrom := ""
 	err := r.Scan(
 		&txt.Username,
@@ -341,7 +350,7 @@ func getModelFromRow(r *sql.Rows) (ACMETxt, error) {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("Row scan error")
 	}
 
-	cslice := cidrslice{}
+	cslice := acmedns.CIDRSlice{}
 	err = json.Unmarshal([]byte(afrom), &cslice)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Error("JSON unmarshall error")
@@ -350,14 +359,17 @@ func getModelFromRow(r *sql.Rows) (ACMETxt, error) {
 	return txt, err
 }
 
-func (d *acmedb) Close() {
+// Close closes the database connection
+func (d *AcmeDB) Close() {
 	_ = d.DB.Close()
 }
 
-func (d *acmedb) GetBackend() *sql.DB {
+// GetBackend returns the underlying sql.DB
+func (d *AcmeDB) GetBackend() *sql.DB {
 	return d.DB
 }
 
-func (d *acmedb) SetBackend(backend *sql.DB) {
+// SetBackend replaces the underlying sql.DB
+func (d *AcmeDB) SetBackend(backend *sql.DB) {
 	d.DB = backend
 }

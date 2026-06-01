@@ -1,15 +1,84 @@
-package main
+package nameserver
 
 import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"sync"
 	"testing"
 
-	"github.com/erikstmartin/go-testdb"
+	testdb "github.com/erikstmartin/go-testdb"
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
+	"github.com/hm-edu/acme-dns/pkg/database"
 	"github.com/miekg/dns"
+	log "github.com/sirupsen/logrus"
+	logrustest "github.com/sirupsen/logrus/hooks/test"
 )
+
+var loghook = new(logrustest.Hook)
+var testDNSServer *DNSServer
+var testDB acmedns.Database
+
+var records = []string{
+	"auth.example.org. A 192.168.1.100",
+	"ns1.auth.example.org. A 192.168.1.101",
+	"cn.example.org CNAME something.example.org.",
+	"!''b', unparseable ",
+	"ns2.auth.example.org. A 192.168.1.102",
+}
+
+var testConfig = acmedns.DNSConfig{
+	General: acmedns.GeneralConfig{
+		Domain:        "auth.example.org",
+		Listen:        "127.0.0.1:15353",
+		Proto:         "udp",
+		Nsname:        "ns1.auth.example.org",
+		Nsadmin:       "admin.example.org",
+		StaticRecords: records,
+		Debug:         false,
+	},
+}
+
+func setupTestLogger() {
+	log.SetOutput(io.Discard)
+	log.AddHook(loghook)
+}
+
+func loggerHasEntryWithMessage(message string) bool {
+	for _, v := range loghook.Entries {
+		if v.Message == message {
+			return true
+		}
+	}
+	return false
+}
+
+func TestMain(m *testing.M) {
+	setupTestLogger()
+
+	newDb := database.New()
+	_ = newDb.Init("sqlite3", ":memory:")
+	testDB = newDb
+
+	testDNSServer = New(testDB, testConfig.General.Listen, testConfig.General.Proto, testConfig.General.Domain)
+	testDNSServer.ParseRecords(testConfig)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	testDNSServer.Server.NotifyStartedFunc = func() {
+		wg.Done()
+	}
+	go testDNSServer.Start(make(chan error, 1))
+	wg.Wait()
+
+	exitval := m.Run()
+	_ = testDNSServer.Server.Shutdown()
+	testDB.Close()
+	os.Exit(exitval)
+}
 
 type resolver struct {
 	server string
@@ -27,13 +96,11 @@ func (r *resolver) lookup(host string, qtype uint16) (*dns.Msg, error) {
 	if in != nil && in.Rcode != dns.RcodeSuccess {
 		return in, fmt.Errorf("Received error from the server [%s]", dns.RcodeToString[in.Rcode])
 	}
-
 	return in, nil
 }
 
 func hasExpectedTXTAnswer(answer []dns.RR, cmpTXT string) error {
 	for _, record := range answer {
-		// We expect only one answer, so no need to loop through the answer slice
 		if rec, ok := record.(*dns.TXT); ok {
 			for _, txtValue := range rec.Txt {
 				if txtValue == cmpTXT {
@@ -60,21 +127,21 @@ func TestQuestionDBError(t *testing.T) {
 	if err != nil {
 		t.Errorf("Got error: %v", err)
 	}
-	oldDb := DB.GetBackend()
+	oldDb := testDB.GetBackend()
 
-	DB.SetBackend(tdb)
-	defer DB.SetBackend(oldDb)
+	testDB.SetBackend(tdb)
+	defer testDB.SetBackend(oldDb)
 
 	q := dns.Question{Name: dns.Fqdn("whatever.tld"), Qtype: dns.TypeTXT, Qclass: dns.ClassINET}
-	_, err = dnsserver.answerTXT(q)
+	_, err = testDNSServer.answerTXT(q)
 	if err == nil {
 		t.Errorf("Expected error but got none")
 	}
 }
 
 func TestParse(t *testing.T) {
-	var testcfg = DNSConfig{
-		General: general{
+	var testcfg = acmedns.DNSConfig{
+		General: acmedns.GeneralConfig{
 			Domain:        ")",
 			Nsname:        "ns1.auth.example.org",
 			Nsadmin:       "admin.example.org",
@@ -82,7 +149,7 @@ func TestParse(t *testing.T) {
 			Debug:         false,
 		},
 	}
-	dnsserver.ParseRecords(testcfg)
+	testDNSServer.ParseRecords(testcfg)
 	if !loggerHasEntryWithMessage("Error while adding SOA record") {
 		t.Errorf("Expected SOA parsing to return error, but did not find one")
 	}
@@ -118,7 +185,6 @@ func TestEDNSA(t *testing.T) {
 	msg.Id = dns.Id()
 	msg.Question = make([]dns.Question, 1)
 	msg.Question[0] = dns.Question{Name: dns.Fqdn("auth.example.org"), Qtype: dns.TypeA, Qclass: dns.ClassINET}
-	// Set EDNS0 with DO=1
 	msg.SetEdns0(512, true)
 	in, err := dns.Exchange(msg, "127.0.0.1:15353")
 	if err != nil {
@@ -138,7 +204,6 @@ func TestEDNSBADVERS(t *testing.T) {
 	msg.Id = dns.Id()
 	msg.Question = make([]dns.Question, 1)
 	msg.Question[0] = dns.Question{Name: dns.Fqdn("auth.example.org"), Qtype: dns.TypeA, Qclass: dns.ClassINET}
-	// Set EDNS0 with version 1
 	o := new(dns.OPT)
 	o.SetVersion(1)
 	o.Hdr.Name = "."
@@ -201,13 +266,13 @@ func TestResolveTXT(t *testing.T) {
 	resolv := resolver{server: "127.0.0.1:15353"}
 	validTXT := "______________valid_response_______________"
 
-	atxt, err := DB.Register(cidrslice{})
+	atxt, err := testDB.Register(acmedns.CIDRSlice{})
 	if err != nil {
 		t.Errorf("Could not initiate db record: [%v]", err)
 		return
 	}
 	atxt.Value = validTXT
-	err = DB.Update(atxt.ACMETxtPost)
+	err = testDB.Update(atxt.ACMETxtPost)
 	if err != nil {
 		t.Errorf("Could not update db record: [%v]", err)
 		return
