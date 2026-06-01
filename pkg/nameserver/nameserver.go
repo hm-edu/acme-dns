@@ -1,10 +1,11 @@
-package main
+package nameserver
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/hm-edu/acme-dns/pkg/acmedns"
 	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
 )
@@ -16,7 +17,7 @@ type Records struct {
 
 // DNSServer is the main struct for acme-dns DNS server
 type DNSServer struct {
-	DB              database
+	DB              acmedns.Database
 	Domain          string
 	Server          *dns.Server
 	SOA             dns.RR
@@ -24,8 +25,8 @@ type DNSServer struct {
 	Domains         map[string]Records
 }
 
-// NewDNSServer parses the DNS records from config and returns a new DNSServer struct
-func NewDNSServer(db database, addr string, proto string, domain string) *DNSServer {
+// New creates and returns a new DNSServer
+func New(db acmedns.Database, addr string, proto string, domain string) *DNSServer {
 	var server DNSServer
 	server.Server = &dns.Server{Addr: addr, Net: proto}
 	if !strings.HasSuffix(domain, ".") {
@@ -40,7 +41,6 @@ func NewDNSServer(db database, addr string, proto string, domain string) *DNSSer
 
 // Start starts the DNSServer
 func (d *DNSServer) Start(errorChannel chan error) {
-	// DNS server part
 	dns.HandleFunc(".", d.handleRequest)
 	log.WithFields(log.Fields{"addr": d.Server.Addr, "proto": d.Server.Net}).Info("Listening DNS")
 	err := d.Server.ListenAndServe()
@@ -49,21 +49,22 @@ func (d *DNSServer) Start(errorChannel chan error) {
 	}
 }
 
-// ParseRecords parses a slice of DNS record string
-func (d *DNSServer) ParseRecords(config DNSConfig) {
+// ParseRecords parses a slice of DNS record strings from the config
+func (d *DNSServer) ParseRecords(config acmedns.DNSConfig) {
 	for _, v := range config.General.StaticRecords {
 		rr, err := dns.NewRR(strings.ToLower(v))
 		if err != nil {
 			log.WithFields(log.Fields{"error": err.Error(), "rr": v}).Warning("Could not parse RR from config")
 			continue
 		}
-		// Add parsed RR
 		d.appendRR(rr)
 	}
-	// Create serial
 	serial := time.Now().Format("2006010215")
-	// Add SOA
-	SOAstring := fmt.Sprintf("%s. SOA %s. %s. %s 28800 7200 604800 86400", strings.ToLower(config.General.Domain), strings.ToLower(config.General.Nsname), strings.ToLower(config.General.Nsadmin), serial)
+	SOAstring := fmt.Sprintf("%s. SOA %s. %s. %s 28800 7200 604800 86400",
+		strings.ToLower(config.General.Domain),
+		strings.ToLower(config.General.Nsname),
+		strings.ToLower(config.General.Nsadmin),
+		serial)
 	soarr, err := dns.NewRR(SOAstring)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error(), "soa": SOAstring}).Error("Error while adding SOA record")
@@ -90,16 +91,13 @@ func (d *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
 	m := new(dns.Msg)
 	m.SetReply(r)
 
-	// handle edns0
 	opt := r.IsEdns0()
 	if opt != nil {
 		if opt.Version() != 0 {
-			// Only EDNS0 is standardized
 			//nolint:staticcheck
 			m.MsgHdr.Rcode = dns.RcodeBadVers
 			m.SetEdns0(512, false)
 		} else {
-			// We can safely do this as we know that we're not setting other OPT RRs within acme-dns.
 			m.SetEdns0(512, false)
 			if r.Opcode == dns.OpcodeQuery {
 				d.readQuery(m)
@@ -156,7 +154,6 @@ func (d *DNSServer) getRecord(q dns.Question) ([]dns.RR, error) {
 	return rr, nil
 }
 
-// answeringForDomain checks if we have any records for a domain
 func (d *DNSServer) answeringForDomain(name string) bool {
 	if d.Domain == strings.ToLower(name) {
 		return true
@@ -178,7 +175,6 @@ func (d *DNSServer) isAuthoritative(q dns.Question) bool {
 	return false
 }
 
-// isOwnChallenge checks if the query is for the domain of this acme-dns instance. Used for answering its own ACME challenges
 func (d *DNSServer) isOwnChallenge(name string) bool {
 	domainParts := strings.SplitN(name, ".", 2)
 	if len(domainParts) == 2 {
@@ -215,7 +211,6 @@ func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
 		}
 	}
 	if len(r) > 0 {
-		// Make sure that we return NOERROR if there were dynamic records for the domain
 		rcode = dns.RcodeSuccess
 	}
 	log.WithFields(log.Fields{"qtype": dns.TypeToString[q.Qtype], "domain": q.Name, "rcode": dns.RcodeToString[rcode]}).Debug("Answering question for domain")
@@ -224,7 +219,7 @@ func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
 
 func (d *DNSServer) answerTXT(q dns.Question) ([]dns.RR, error) {
 	var ra []dns.RR
-	subdomain := sanitizeDomainQuestion(q.Name)
+	subdomain := acmedns.SanitizeDomainQuestion(q.Name)
 	atxt, err := d.DB.GetTXTForDomain(subdomain)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Debug("Error while trying to get record")
@@ -241,7 +236,6 @@ func (d *DNSServer) answerTXT(q dns.Question) ([]dns.RR, error) {
 	return ra, nil
 }
 
-// answerOwnChallenge answers to ACME challenge for acme-dns own certificate
 func (d *DNSServer) answerOwnChallenge(q dns.Question) ([]dns.RR, error) {
 	r := new(dns.TXT)
 	r.Hdr = dns.RR_Header{Name: q.Name, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 1}

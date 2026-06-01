@@ -1,4 +1,4 @@
-package main
+package nameserver
 
 import (
 	"context"
@@ -8,20 +8,20 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// ChallengeProvider implements go-acme/lego Provider interface which is used for ACME DNS challenge handling
+// ChallengeProvider implements the libdns Provider interface for ACME DNS-01 challenges
 type ChallengeProvider struct {
 	servers []*DNSServer
 }
 
-// NewChallengeProvider creates a new instance of ChallengeProvider
+// NewChallengeProvider creates a new ChallengeProvider
 func NewChallengeProvider(servers []*DNSServer) ChallengeProvider {
 	return ChallengeProvider{servers: servers}
 }
 
+// AppendRecords sets the ACME challenge token on all DNS servers
 func (c *ChallengeProvider) AppendRecords(ctx context.Context, zone string, recs []libdns.Record) ([]libdns.Record, error) {
 	var token string
 	for _, item := range recs {
-
 		log.WithFields(log.Fields{"name": item.RR().Name, "value": item.RR().Data, "type": item.RR().Type}).Info("Attempting to set dns record")
 		if strings.Contains(item.RR().Name, "acme-challenge") {
 			token = item.RR().Data
@@ -35,6 +35,7 @@ func (c *ChallengeProvider) AppendRecords(ctx context.Context, zone string, recs
 	return recs, nil
 }
 
+// DeleteRecords clears the ACME challenge token from all DNS servers
 func (c *ChallengeProvider) DeleteRecords(ctx context.Context, zone string, recs []libdns.Record) ([]libdns.Record, error) {
 	for _, item := range recs {
 		log.WithFields(log.Fields{"name": item.RR().Name, "value": item.RR().Data, "type": item.RR().Type}).Info("Attempting to unset dns record")

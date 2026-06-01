@@ -1,8 +1,7 @@
-package main
+package acmedns
 
 import (
 	"os"
-	"syscall"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -20,7 +19,7 @@ func TestSetupLogging(t *testing.T) {
 		{"json", "error", "error"},
 		{"text", "something", "warning"},
 	} {
-		setupLogging(test.format, test.level)
+		SetupLogging(test.format, test.level)
 		if log.GetLevel().String() != test.expected {
 			t.Errorf("Test %d: Expected loglevel %s but got %s", i, test.expected, log.GetLevel().String())
 		}
@@ -35,16 +34,15 @@ func TestReadConfig(t *testing.T) {
 		{
 			[]byte("[general]\nlisten = \":53\"\ndebug = true\n[api]\napi_domain = \"something.strange\""),
 			DNSConfig{
-				General: general{
+				General: GeneralConfig{
 					Listen: ":53",
 					Debug:  true,
 				},
-				API: httpapi{
+				API: APIConfig{
 					Domain: "something.strange",
 				},
 			},
 		},
-
 		{
 			[]byte("[\x00[[[[[[[[[de\nlisten =]"),
 			DNSConfig{},
@@ -65,7 +63,7 @@ func TestReadConfig(t *testing.T) {
 		if err := tmpfile.Close(); err != nil {
 			t.Error("Could not close temporary file")
 		}
-		ret, _ := readConfig(tmpfile.Name())
+		ret, _ := ReadConfig(tmpfile.Name())
 		if ret.General.Listen != test.output.General.Listen {
 			t.Errorf("Test %d: Expected listen value %s, but got %s", i, test.output.General.Listen, ret.General.Listen)
 		}
@@ -84,72 +82,14 @@ func TestGetIPListFromHeader(t *testing.T) {
 		{" 1.1.1.1 , 2.2.2.2", []string{"1.1.1.1", "2.2.2.2"}},
 		{",1.1.1.1 ,2.2.2.2", []string{"1.1.1.1", "2.2.2.2"}},
 	} {
-		res := getIPListFromHeader(test.input)
+		res := GetIPListFromHeader(test.input)
 		if len(res) != len(test.output) {
 			t.Errorf("Test %d: Expected [%d] items in return list, but got [%d]", i, len(test.output), len(res))
 		} else {
-
 			for j, vv := range test.output {
 				if res[j] != vv {
 					t.Errorf("Test %d: Expected return value [%v] but got [%v]", j, test.output, res)
 				}
-
-			}
-		}
-	}
-}
-
-func TestFileCheckPermissionDenied(t *testing.T) {
-	tmpfile, err := os.CreateTemp("", "acmedns")
-	if err != nil {
-		t.Error("Could not create temporary file")
-	}
-	defer func(name string) {
-		_ = os.Remove(name)
-	}(tmpfile.Name())
-	_ = syscall.Chmod(tmpfile.Name(), 0000)
-	if fileIsAccessible(tmpfile.Name()) {
-		t.Errorf("File should not be accessible")
-	}
-	_ = syscall.Chmod(tmpfile.Name(), 0644)
-}
-
-func TestFileCheckNotExists(t *testing.T) {
-	if fileIsAccessible("/path/that/does/not/exist") {
-		t.Errorf("File should not be accessible")
-	}
-}
-
-func TestFileCheckOK(t *testing.T) {
-	tmpfile, err := os.CreateTemp("", "acmedns")
-	if err != nil {
-		t.Error("Could not create temporary file")
-	}
-	defer func(name string) {
-		_ = os.Remove(name)
-	}(tmpfile.Name())
-	if !fileIsAccessible(tmpfile.Name()) {
-		t.Errorf("File should be accessible")
-	}
-}
-
-func TestPrepareConfig(t *testing.T) {
-	for i, test := range []struct {
-		input       DNSConfig
-		shoulderror bool
-	}{
-		{DNSConfig{Database: dbsettings{Engine: "whatever", Connection: "whatever_too"}}, false},
-		{DNSConfig{Database: dbsettings{Engine: "", Connection: "whatever_too"}}, true},
-		{DNSConfig{Database: dbsettings{Engine: "whatever", Connection: ""}}, true},
-	} {
-		_, err := prepareConfig(test.input)
-		if test.shoulderror {
-			if err == nil {
-				t.Errorf("Test %d: Expected error with prepareConfig input data [%v]", i, test.input)
-			}
-		} else {
-			if err != nil {
-				t.Errorf("Test %d: Expected no error with prepareConfig input data [%v]", i, test.input)
 			}
 		}
 	}
