@@ -302,3 +302,49 @@ func TestAnswerManagedARecord(t *testing.T) {
 		t.Fatal("expected at least one RR in answer")
 	}
 }
+
+func TestAnswerManagedNODATA(t *testing.T) {
+	// Name exists in dns_records as A, query for AAAA — must be NODATA (NOERROR, empty answer).
+	rec := DNSRecord{
+		ID: "nodata-test-1", Name: "nodata.auth.example.org.", Type: "A", Value: "1.2.3.4", TTL: 300, Created: 0,
+	}
+	if err := DB.CreateRecord(rec); err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	t.Cleanup(func() { _ = DB.DeleteRecord("nodata-test-1") })
+
+	q := dns.Question{Name: "nodata.auth.example.org.", Qtype: dns.TypeAAAA, Qclass: dns.ClassINET}
+	rrs, rcode, _, err := dnsserver.answer(q)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR (NODATA) for existing name with wrong type, got %s", dns.RcodeToString[rcode])
+	}
+	if len(rrs) != 0 {
+		t.Fatalf("expected empty answer section for NODATA, got %d records", len(rrs))
+	}
+}
+
+func TestAnswerManagedCAARecord(t *testing.T) {
+	// CAA value must not be quote-wrapped — it has its own tag-value structure.
+	rec := DNSRecord{
+		ID: "caa-test-1", Name: "caa.auth.example.org.", Type: "CAA", Value: `0 issue "letsencrypt.org"`, TTL: 300, Created: 0,
+	}
+	if err := DB.CreateRecord(rec); err != nil {
+		t.Fatalf("CreateRecord: %v", err)
+	}
+	t.Cleanup(func() { _ = DB.DeleteRecord("caa-test-1") })
+
+	q := dns.Question{Name: "caa.auth.example.org.", Qtype: dns.TypeCAA, Qclass: dns.ClassINET}
+	rrs, rcode, _, err := dnsserver.answer(q)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rcode != dns.RcodeSuccess {
+		t.Fatalf("expected NOERROR for CAA query, got %s", dns.RcodeToString[rcode])
+	}
+	if len(rrs) == 0 {
+		t.Fatal("expected CAA record in answer, got none")
+	}
+}

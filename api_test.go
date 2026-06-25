@@ -630,6 +630,20 @@ func TestAdminCreateRecordInvalidMXValue(t *testing.T) {
 		Expect().Status(http.StatusBadRequest)
 }
 
+func TestAdminCreateCAARecord(t *testing.T) {
+	_, e := setupAdminRouter(t, "test-token")
+	payload := map[string]interface{}{
+		"name":  "caa.example.com",
+		"type":  "CAA",
+		"value": `0 issue "letsencrypt.org"`,
+		"ttl":   300,
+	}
+	e.POST("/admin/records").
+		WithHeader("Authorization", "Bearer test-token").
+		WithJSON(payload).
+		Expect().Status(http.StatusCreated).JSON().Object().ContainsKey("id")
+}
+
 func TestAdminTXTValueQuoteStripping(t *testing.T) {
 	_, e := setupAdminRouter(t, "test-token")
 	// Value submitted with surrounding quotes should be stored and returned without them.

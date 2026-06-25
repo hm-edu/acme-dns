@@ -211,9 +211,13 @@ func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
 	}
 	// Fall through to managed dns_records if no static or ACME records matched
 	if len(r) == 0 {
-		managed := d.answerManaged(q)
+		managed, nameExists := d.answerManaged(q)
 		if len(managed) > 0 {
 			r = managed
+			authoritative = true
+		} else if nameExists {
+			// Name exists in dns_records but not for this type: NODATA (NOERROR, empty answer)
+			rcode = dns.RcodeSuccess
 			authoritative = true
 		}
 	}
@@ -252,21 +256,28 @@ func (d *DNSServer) answerOwnChallenge(q dns.Question) ([]dns.RR, error) {
 	return []dns.RR{r}, nil
 }
 
-func (d *DNSServer) answerManaged(q dns.Question) []dns.RR {
+func (d *DNSServer) answerManaged(q dns.Question) ([]dns.RR, bool) {
 	qtype := dns.TypeToString[q.Qtype]
 	if qtype == "" {
-		return nil
+		return nil, false
 	}
 	name := strings.ToLower(q.Name)
-	records, err := d.DB.ListRecords(qtype, name)
+	// Check if the name exists at all (any type) to distinguish NXDOMAIN from NODATA.
+	allRecords, err := d.DB.ListRecords("", name)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Debug("Error querying managed records")
-		return nil
+		return nil, false
+	}
+	if len(allRecords) == 0 {
+		return nil, false
 	}
 	var rrs []dns.RR
-	for _, rec := range records {
+	for _, rec := range allRecords {
+		if rec.Type != qtype {
+			continue
+		}
 		value := rec.Value
-		if rec.Type == "TXT" || rec.Type == "CAA" {
+		if rec.Type == "TXT" {
 			value = `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
 		}
 		rrStr := fmt.Sprintf("%s %d IN %s %s", rec.Name, rec.TTL, rec.Type, value)
@@ -277,5 +288,5 @@ func (d *DNSServer) answerManaged(q dns.Question) []dns.RR {
 		}
 		rrs = append(rrs, rr)
 	}
-	return rrs
+	return rrs, true
 }

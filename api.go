@@ -25,7 +25,7 @@ func toFQDN(name string) string {
 	return name
 }
 
-// stripOuterQuotes removes a single layer of surrounding double-quotes from TXT/CAA values
+// stripOuterQuotes removes a single layer of surrounding double-quotes from TXT values
 // so the DB always stores the raw string content regardless of how the caller supplied it.
 func stripOuterQuotes(value string) string {
 	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
@@ -36,7 +36,7 @@ func stripOuterQuotes(value string) string {
 
 // probeRR validates that rtype+value form a parseable DNS RR using a placeholder name and TTL.
 func probeRR(rtype, value string) bool {
-	if rtype == "TXT" || rtype == "CAA" {
+	if rtype == "TXT" {
 		value = `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
 	}
 	_, err := dns.NewRR(fmt.Sprintf("probe.invalid. 300 IN %s %s", rtype, value))
