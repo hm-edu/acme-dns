@@ -101,7 +101,7 @@ func (d *acmedb) Init(engine string, connection string) error {
 	}
 	if err == nil {
 		if versionString == "0" {
-			// No errors so we should now be in version 1
+		// No errors so we should now be in the current version
 			insversion := fmt.Sprintf("INSERT INTO acmedns (Name, Value) values('db_version', '%d')", DBVersion)
 			_, err = db.Exec(insversion)
 		}
@@ -123,11 +123,20 @@ func (d *acmedb) checkDBUpgrades(versionString string) error {
 }
 
 func (d *acmedb) handleDBUpgrades(version int) error {
-	if version == 0 {
-		return d.handleDBUpgradeTo1()
-	}
-	if version == 1 {
-		return d.handleDBUpgradeTo2()
+	for version < DBVersion {
+		var err error
+		switch version {
+		case 0:
+			err = d.handleDBUpgradeTo1()
+		case 1:
+			err = d.handleDBUpgradeTo2()
+		default:
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		version++
 	}
 	return nil
 }

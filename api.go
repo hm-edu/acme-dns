@@ -25,6 +25,15 @@ func toFQDN(name string) string {
 	return name
 }
 
+// stripOuterQuotes removes a single layer of surrounding double-quotes from TXT/CAA values
+// so the DB always stores the raw string content regardless of how the caller supplied it.
+func stripOuterQuotes(value string) string {
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		return value[1 : len(value)-1]
+	}
+	return value
+}
+
 // probeRR validates that rtype+value form a parseable DNS RR using a placeholder name and TTL.
 func probeRR(rtype, value string) bool {
 	if rtype == "TXT" || rtype == "CAA" {
@@ -223,7 +232,7 @@ func adminCreateRecord(w http.ResponseWriter, r *http.Request, _ httprouter.Para
 		ID:      uuid.New().String(),
 		Name:    toFQDN(req.Name),
 		Type:    req.Type,
-		Value:   req.Value,
+		Value:   stripOuterQuotes(req.Value),
 		TTL:     ttl,
 		Created: time.Now().Unix(),
 	}
@@ -282,7 +291,7 @@ func adminUpdateRecord(w http.ResponseWriter, r *http.Request, ps httprouter.Par
 	if ttl == 0 {
 		ttl = 300
 	}
-	rec := DNSRecord{ID: id, Name: toFQDN(req.Name), Type: req.Type, Value: req.Value, TTL: ttl}
+	rec := DNSRecord{ID: id, Name: toFQDN(req.Name), Type: req.Type, Value: stripOuterQuotes(req.Value), TTL: ttl}
 	if err := DB.UpdateRecord(rec); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		if errors.Is(err, sql.ErrNoRows) {

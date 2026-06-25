@@ -630,6 +630,22 @@ func TestAdminCreateRecordInvalidMXValue(t *testing.T) {
 		Expect().Status(http.StatusBadRequest)
 }
 
+func TestAdminTXTValueQuoteStripping(t *testing.T) {
+	_, e := setupAdminRouter(t, "test-token")
+	// Value submitted with surrounding quotes should be stored and returned without them.
+	payload := map[string]interface{}{
+		"name":  "txt.example.com",
+		"type":  "TXT",
+		"value": `"some token"`,
+		"ttl":   60,
+	}
+	obj := e.POST("/admin/records").
+		WithHeader("Authorization", "Bearer test-token").
+		WithJSON(payload).
+		Expect().Status(http.StatusCreated).JSON().Object()
+	obj.Value("value").String().Equal("some token")
+}
+
 func TestAdminListRecordsFilter(t *testing.T) {
 	_, e := setupAdminRouter(t, "test-token")
 	// Create an A record and a CNAME record
