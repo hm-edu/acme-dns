@@ -1,4 +1,14 @@
 # Changelog
+- v0.22.0:
+  - New
+    - Admin API for managing DNS records (CRUD operations)
+    - Bearer token authentication for admin endpoints
+    - Store custom DNS records in database (A, AAAA, NS, TXT, CNAME, MX, SOA, SRV, PTR)
+    - Comprehensive DNS record validation (type, value, TTL)
+  - Changed
+    - DNS server now serves both challenge records and managed records from database
+    - FQDN normalization on ingress for consistency
+    - Added database index for efficient record lookups
 - v0.18.0:
   - Switched to go 1.24
 - v0.17.1:

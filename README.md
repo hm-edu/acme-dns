@@ -19,6 +19,7 @@ For longer explanation of the underlying issue and other proposed solutions, see
 
 - Simplified DNS server, serving your ACME DNS challenges (TXT)
 - Custom records (have your required A, AAAA, NS, etc. records served)
+- Admin API for managing DNS records with Bearer token authentication
 - HTTP API automatically acquires and uses Let's Encrypt TLS certificate
 - Limit /update API endpoint access to specific CIDR mask(s), defined in the /register request
 - Supports SQLite & PostgreSQL as DB backends
@@ -37,6 +38,139 @@ Using acme-dns is a three-step process (provided you already have the self-hoste
 - Crontab and forget.
 
 ## API
+
+### Admin API
+
+The Admin API allows authenticated administrators to manage DNS records stored in the database. All endpoints require Bearer token authentication and are disabled by default.
+
+**Enabling the Admin API**
+
+To enable the Admin API, set an admin token in your configuration:
+
+```toml
+[api.admin]
+token = "your-secret-admin-token-here"
+```
+
+**Authentication**
+
+All Admin API requests require the `Authorization` header with a Bearer token:
+
+```
+Authorization: Bearer your-secret-admin-token-here
+```
+
+#### List records
+
+Retrieve all DNS records, optionally filtered by record type or name.
+
+`GET /admin/records?type=TYPE&name=NAME`
+
+**Query Parameters:**
+- `type` (optional): Filter by DNS record type (A, AAAA, NS, TXT, CNAME, MX, etc.)
+- `name` (optional): Filter by record name (domain name)
+
+**Response**
+
+`Status: 200 OK`
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "example.org.",
+    "type": "A",
+    "value": "192.0.2.1",
+    "ttl": 3600,
+    "created": 1719259200
+  }
+]
+```
+
+#### Create record
+
+Create a new DNS record.
+
+`POST /admin/records`
+
+**Request body:**
+
+```json
+{
+  "name": "example.org",
+  "type": "A",
+  "value": "192.0.2.1",
+  "ttl": 3600
+}
+```
+
+**Fields:**
+- `name`: Domain name for the record (required)
+- `type`: DNS record type: A, AAAA, NS, TXT, CNAME, MX, SOA, SRV, PTR (required)
+- `value`: Record value (required)
+  - A: IPv4 address
+  - AAAA: IPv6 address
+  - NS, CNAME, PTR, MX: Hostname
+  - TXT: Text string (automatically quoted if not already)
+  - SRV: Service record format
+- `ttl`: Time-to-live in seconds (optional, defaults to 300)
+
+**Response**
+
+`Status: 201 Created`
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "example.org.",
+  "type": "A",
+  "value": "192.0.2.1",
+  "ttl": 3600,
+  "created": 1719259200
+}
+```
+
+#### Update record
+
+Update an existing DNS record by ID.
+
+`PUT /admin/records/:id`
+
+**Request body:**
+
+```json
+{
+  "name": "example.org",
+  "type": "A",
+  "value": "192.0.2.2",
+  "ttl": 3600
+}
+```
+
+**Response**
+
+`Status: 200 OK`
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "example.org.",
+  "type": "A",
+  "value": "192.0.2.2",
+  "ttl": 3600,
+  "created": 1719259200
+}
+```
+
+#### Delete record
+
+Delete a DNS record by ID.
+
+`DELETE /admin/records/:id`
+
+**Response**
+
+`Status: 204 No Content`
 
 ### Register endpoint
 
@@ -267,6 +401,9 @@ corsorigins = [
 use_header = false
 # header name to pull the ip address / list of ip addresses from
 header_name = "X-Forwarded-For"
+# Admin API — leave token empty to disable admin endpoints
+# token = "your-secret-admin-token-here"
+token = ""
 
 [logconfig]
 # logging level: "error", "warning", "info" or "debug"
