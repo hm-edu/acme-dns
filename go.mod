@@ -17,7 +17,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.49
 	github.com/miekg/dns v1.1.72
 	github.com/rs/cors v1.11.1
-	github.com/sirupsen/logrus v1.9.4
+	github.com/sirupsen/logrus v1.10.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.54.0
 )
