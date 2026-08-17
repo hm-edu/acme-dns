@@ -18,7 +18,7 @@ require (
 	github.com/miekg/dns v1.1.72
 	github.com/rs/cors v1.11.1
 	github.com/sirupsen/logrus v1.10.0
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	golang.org/x/crypto v0.55.0
 )
 
