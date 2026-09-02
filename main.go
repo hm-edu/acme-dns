@@ -15,7 +15,7 @@ import (
 	"syscall"
 
 	"github.com/caddyserver/certmagic"
-	legolog "github.com/go-acme/lego/v4/log"
+	legolog "github.com/go-acme/lego/v5/log"
 	"github.com/hm-edu/acme-dns/pkg/acmedns"
 	httpapi "github.com/hm-edu/acme-dns/pkg/api"
 	"github.com/hm-edu/acme-dns/pkg/database"
