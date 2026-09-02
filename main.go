@@ -9,6 +9,7 @@ import (
 	"flag"
 	"io"
 	stdlog "log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -105,7 +106,7 @@ func startHTTPAPI(errChan chan error, cfg *acmedns.DNSConfig, db acmedns.Databas
 		_ = logwriter.Close()
 	}(logwriter)
 	stdlog.SetOutput(logwriter)
-	legolog.Logger = logger
+	legolog.SetDefault(slog.New(slog.NewTextHandler(logwriter, nil)))
 
 	router := httprouter.New()
 	c := cors.New(cors.Options{
