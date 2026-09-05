@@ -30,7 +30,7 @@ func (c *ChallengeProvider) AppendRecords(ctx context.Context, zone string, recs
 	}
 
 	for _, s := range c.servers {
-		s.PersonalKeyAuth = token
+		s.SetPersonalKeyAuth(token)
 	}
 	return recs, nil
 }
@@ -41,7 +41,7 @@ func (c *ChallengeProvider) DeleteRecords(ctx context.Context, zone string, recs
 		log.WithFields(log.Fields{"name": item.RR().Name, "value": item.RR().Data, "type": item.RR().Type}).Info("Attempting to unset dns record")
 	}
 	for _, s := range c.servers {
-		s.PersonalKeyAuth = ""
+		s.SetPersonalKeyAuth("")
 	}
 	return recs, nil
 }

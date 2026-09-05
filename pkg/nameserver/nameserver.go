@@ -1,14 +1,24 @@
 package nameserver
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"codeberg.org/miekg/dns"
+	"codeberg.org/miekg/dns/dnsutil"
+	"codeberg.org/miekg/dns/rdata"
 	"github.com/hm-edu/acme-dns/pkg/acmedns"
-	"github.com/miekg/dns"
 	log "github.com/sirupsen/logrus"
 )
+
+// ednsUDPSize is the EDNS0 UDP payload size advertised in responses to EDNS0 queries.
+// 1232 bytes is the value recommended by DNS flag day 2020 and fits within the
+// server's receive buffer (dns.DefaultMsgSize).
+const ednsUDPSize = 1232
 
 // Records is a slice of ResourceRecords
 type Records struct {
@@ -17,31 +27,46 @@ type Records struct {
 
 // DNSServer is the main struct for acme-dns DNS server
 type DNSServer struct {
-	DB              acmedns.Database
-	Domain          string
-	Server          *dns.Server
-	SOA             dns.RR
-	PersonalKeyAuth string
-	Domains         map[string]Records
+	DB      acmedns.Database
+	Domain  string
+	Server  *dns.Server
+	SOA     dns.RR
+	Domains map[string]Records
+
+	// personalKeyAuth holds the TXT value served for the server's own
+	// _acme-challenge record. It is written by the ACME challenge provider and
+	// read by the DNS handler goroutines, hence the atomic access.
+	personalKeyAuth atomic.Value
+}
+
+// SetPersonalKeyAuth sets the TXT value served for the server's own _acme-challenge record
+func (d *DNSServer) SetPersonalKeyAuth(token string) {
+	d.personalKeyAuth.Store(token)
+}
+
+// PersonalKeyAuth returns the TXT value served for the server's own _acme-challenge record
+func (d *DNSServer) PersonalKeyAuth() string {
+	v, _ := d.personalKeyAuth.Load().(string)
+	return v
 }
 
 // New creates and returns a new DNSServer
 func New(db acmedns.Database, addr string, proto string, domain string) *DNSServer {
-	var server DNSServer
+	server := &DNSServer{}
 	server.Server = &dns.Server{Addr: addr, Net: proto}
+	server.Server.Handler = dns.HandlerFunc(server.handleRequest)
 	if !strings.HasSuffix(domain, ".") {
 		domain = domain + "."
 	}
 	server.Domain = strings.ToLower(domain)
 	server.DB = db
-	server.PersonalKeyAuth = ""
+	server.SetPersonalKeyAuth("")
 	server.Domains = make(map[string]Records)
-	return &server
+	return server
 }
 
 // Start starts the DNSServer
 func (d *DNSServer) Start(errorChannel chan error) {
-	dns.HandleFunc(".", d.handleRequest)
 	log.WithFields(log.Fields{"addr": d.Server.Addr, "proto": d.Server.Net}).Info("Listening DNS")
 	err := d.Server.ListenAndServe()
 	if err != nil {
@@ -52,9 +77,13 @@ func (d *DNSServer) Start(errorChannel chan error) {
 // ParseRecords parses a slice of DNS record strings from the config
 func (d *DNSServer) ParseRecords(config acmedns.DNSConfig) {
 	for _, v := range config.General.StaticRecords {
-		rr, err := dns.NewRR(strings.ToLower(v))
-		if err != nil {
-			log.WithFields(log.Fields{"error": err.Error(), "rr": v}).Warning("Could not parse RR from config")
+		rr, err := dns.New(strings.ToLower(v))
+		if err != nil || rr == nil {
+			errstr := "empty record"
+			if err != nil {
+				errstr = err.Error()
+			}
+			log.WithFields(log.Fields{"error": errstr, "rr": v}).Warning("Could not parse RR from config")
 			continue
 		}
 		d.appendRR(rr)
@@ -65,9 +94,13 @@ func (d *DNSServer) ParseRecords(config acmedns.DNSConfig) {
 		strings.ToLower(config.General.Nsname),
 		strings.ToLower(config.General.Nsadmin),
 		serial)
-	soarr, err := dns.NewRR(SOAstring)
-	if err != nil {
-		log.WithFields(log.Fields{"error": err.Error(), "soa": SOAstring}).Error("Error while adding SOA record")
+	soarr, err := dns.New(SOAstring)
+	if err != nil || soarr == nil {
+		errstr := "empty record"
+		if err != nil {
+			errstr = err.Error()
+		}
+		log.WithFields(log.Fields{"error": errstr, "soa": SOAstring}).Error("Error while adding SOA record")
 	} else {
 		d.appendRR(soarr)
 		d.SOA = soarr
@@ -84,31 +117,33 @@ func (d *DNSServer) appendRR(rr dns.RR) {
 		drecs.Records = append(drecs.Records, rr)
 		d.Domains[addDomain] = drecs
 	}
-	log.WithFields(log.Fields{"recordtype": dns.TypeToString[rr.Header().Rrtype], "domain": addDomain}).Debug("Adding new record to domain")
+	log.WithFields(log.Fields{"recordtype": dnsutil.TypeToString(dns.RRToType(rr)), "domain": addDomain}).Debug("Adding new record to domain")
 }
 
-func (d *DNSServer) handleRequest(w dns.ResponseWriter, r *dns.Msg) {
-	m := new(dns.Msg)
-	m.SetReply(r)
-
-	opt := r.IsEdns0()
-	if opt != nil {
-		if opt.Version() != 0 {
-			//nolint:staticcheck
-			m.MsgHdr.Rcode = dns.RcodeBadVers
-			m.SetEdns0(512, false)
-		} else {
-			m.SetEdns0(512, false)
-			if r.Opcode == dns.OpcodeQuery {
-				d.readQuery(m)
-			}
-		}
-	} else {
-		if r.Opcode == dns.OpcodeQuery {
-			d.readQuery(m)
-		}
+func (d *DNSServer) handleRequest(_ context.Context, w dns.ResponseWriter, r *dns.Msg) {
+	// The server only decodes the header and question section before invoking the
+	// handler, decode the rest so EDNS0 information becomes available.
+	if err := r.Unpack(); err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Debug("Could not unpack DNS message")
+		return
 	}
-	_ = w.WriteMsg(m)
+	m := new(dns.Msg)
+	dnsutil.SetReply(m, r)
+
+	// r.UDPSize is only set when the request carried an EDNS0 OPT record.
+	hasEDNS := r.UDPSize > 0
+	if hasEDNS {
+		// RFC 6891: a response to an EDNS0 query must carry an OPT record.
+		m.UDPSize = ednsUDPSize
+	}
+	if hasEDNS && r.Version != 0 {
+		m.Rcode = dns.RcodeBadVers
+	} else if r.Opcode == dns.OpcodeQuery {
+		d.readQuery(m)
+	}
+	if _, err := io.Copy(w, m); err != nil {
+		log.WithFields(log.Fields{"error": err.Error()}).Debug("Could not write DNS response")
+	}
 }
 
 func (d *DNSServer) readQuery(m *dns.Msg) {
@@ -118,33 +153,31 @@ func (d *DNSServer) readQuery(m *dns.Msg) {
 			if auth {
 				authoritative = auth
 			}
-			//nolint:staticcheck
-			m.MsgHdr.Rcode = rc
+			m.Rcode = rc
 			m.Answer = append(m.Answer, rr...)
 		}
 	}
-	//nolint:staticcheck
-	m.MsgHdr.Authoritative = authoritative
-	if authoritative {
-		//nolint:staticcheck
-		if m.MsgHdr.Rcode == dns.RcodeNameError {
-			m.Ns = append(m.Ns, d.SOA)
-		}
+	m.Authoritative = authoritative
+	if authoritative && m.Rcode == dns.RcodeNameError && d.SOA != nil {
+		m.Ns = append(m.Ns, d.SOA)
 	}
 }
 
-func (d *DNSServer) getRecord(q dns.Question) ([]dns.RR, error) {
+func (d *DNSServer) getRecord(q dns.RR) ([]dns.RR, error) {
 	var rr []dns.RR
 	var cnames []dns.RR
-	domain, ok := d.Domains[strings.ToLower(q.Name)]
+	qname := q.Header().Name
+	qtype := dns.RRToType(q)
+	domain, ok := d.Domains[strings.ToLower(qname)]
 	if !ok {
-		return rr, fmt.Errorf("no records for domain %s", q.Name)
+		return rr, fmt.Errorf("no records for domain %s", qname)
 	}
 	for _, ri := range domain.Records {
-		if ri.Header().Rrtype == q.Qtype {
+		rtype := dns.RRToType(ri)
+		if rtype == qtype {
 			rr = append(rr, ri)
 		}
-		if ri.Header().Rrtype == dns.TypeCNAME {
+		if rtype == dns.TypeCNAME {
 			cnames = append(cnames, ri)
 		}
 	}
@@ -162,11 +195,11 @@ func (d *DNSServer) answeringForDomain(name string) bool {
 	return ok
 }
 
-func (d *DNSServer) isAuthoritative(q dns.Question) bool {
-	if d.answeringForDomain(q.Name) {
+func (d *DNSServer) isAuthoritative(name string) bool {
+	if d.answeringForDomain(name) {
 		return true
 	}
-	domainParts := strings.Split(strings.ToLower(q.Name), ".")
+	domainParts := strings.Split(strings.ToLower(name), ".")
 	for i := range domainParts {
 		if d.answeringForDomain(strings.Join(domainParts[i:], ".")) {
 			return true
@@ -191,17 +224,19 @@ func (d *DNSServer) isOwnChallenge(name string) bool {
 	return false
 }
 
-func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
-	var rcode int
+func (d *DNSServer) answer(q dns.RR) ([]dns.RR, uint16, bool, error) {
+	var rcode uint16
 	var err error
 	var txtRRs []dns.RR
-	var authoritative = d.isAuthoritative(q)
-	if !d.isOwnChallenge(q.Name) && !d.answeringForDomain(q.Name) {
+	qname := q.Header().Name
+	qtype := dns.RRToType(q)
+	var authoritative = d.isAuthoritative(qname)
+	if !d.isOwnChallenge(qname) && !d.answeringForDomain(qname) {
 		rcode = dns.RcodeNameError
 	}
 	r, _ := d.getRecord(q)
-	if q.Qtype == dns.TypeTXT {
-		if d.isOwnChallenge(q.Name) {
+	if qtype == dns.TypeTXT {
+		if d.isOwnChallenge(qname) {
 			txtRRs, err = d.answerOwnChallenge(q)
 		} else {
 			txtRRs, err = d.answerTXT(q)
@@ -213,13 +248,13 @@ func (d *DNSServer) answer(q dns.Question) ([]dns.RR, int, bool, error) {
 	if len(r) > 0 {
 		rcode = dns.RcodeSuccess
 	}
-	log.WithFields(log.Fields{"qtype": dns.TypeToString[q.Qtype], "domain": q.Name, "rcode": dns.RcodeToString[rcode]}).Debug("Answering question for domain")
+	log.WithFields(log.Fields{"qtype": dnsutil.TypeToString(qtype), "domain": qname, "rcode": dnsutil.RcodeToString(rcode)}).Debug("Answering question for domain")
 	return r, rcode, authoritative, nil
 }
 
-func (d *DNSServer) answerTXT(q dns.Question) ([]dns.RR, error) {
+func (d *DNSServer) answerTXT(q dns.RR) ([]dns.RR, error) {
 	var ra []dns.RR
-	subdomain := acmedns.SanitizeDomainQuestion(q.Name)
+	subdomain := acmedns.SanitizeDomainQuestion(q.Header().Name)
 	atxt, err := d.DB.GetTXTForDomain(subdomain)
 	if err != nil {
 		log.WithFields(log.Fields{"error": err.Error()}).Debug("Error while trying to get record")
@@ -227,18 +262,19 @@ func (d *DNSServer) answerTXT(q dns.Question) ([]dns.RR, error) {
 	}
 	for _, v := range atxt {
 		if len(v) > 0 {
-			r := new(dns.TXT)
-			r.Hdr = dns.RR_Header{Name: q.Name, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 1}
-			r.Txt = append(r.Txt, v)
-			ra = append(ra, r)
+			ra = append(ra, newTXT(q.Header().Name, v))
 		}
 	}
 	return ra, nil
 }
 
-func (d *DNSServer) answerOwnChallenge(q dns.Question) ([]dns.RR, error) {
-	r := new(dns.TXT)
-	r.Hdr = dns.RR_Header{Name: q.Name, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 1}
-	r.Txt = append(r.Txt, d.PersonalKeyAuth)
-	return []dns.RR{r}, nil
+func (d *DNSServer) answerOwnChallenge(q dns.RR) ([]dns.RR, error) {
+	return []dns.RR{newTXT(q.Header().Name, d.PersonalKeyAuth())}, nil
+}
+
+func newTXT(name string, value string) *dns.TXT {
+	return &dns.TXT{
+		Hdr: dns.Header{Name: name, Class: dns.ClassINET, TTL: 1},
+		TXT: rdata.TXT{Txt: []string{value}},
+	}
 }

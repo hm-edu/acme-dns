@@ -1,8 +1,9 @@
 module github.com/hm-edu/acme-dns
 
-go 1.26.0
+go 1.27.0
 
 require (
+	codeberg.org/miekg/dns v0.6.109
 	github.com/BurntSushi/toml v1.6.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caddyserver/certmagic v0.25.4
@@ -14,7 +15,6 @@ require (
 	github.com/lib/pq v1.12.3
 	github.com/libdns/libdns v1.1.1
 	github.com/mattn/go-sqlite3 v1.14.50
-	github.com/miekg/dns v1.1.73
 	github.com/rs/cors v1.11.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
@@ -38,6 +38,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mholt/acmez/v3 v3.1.6 // indirect
+	github.com/miekg/dns v1.1.73 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/sanity-io/litter v1.5.5 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect

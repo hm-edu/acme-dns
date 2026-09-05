@@ -54,14 +54,16 @@ func (c *CIDRSlice) ValidEntries() []string {
 	return valid
 }
 
-// AllowedFrom checks if an IP address is within the allowed ranges
-func (a ACMETxt) AllowedFrom(ip string) bool {
-	remoteIP := net.ParseIP(ip)
-	if len(a.AllowFrom.ValidEntries()) == 0 {
+// Allows checks if an IP address is within the allowed ranges. An empty (or
+// completely invalid) slice allows every address.
+func (c *CIDRSlice) Allows(ip string) bool {
+	valid := c.ValidEntries()
+	if len(valid) == 0 {
 		return true
 	}
-	log.WithFields(log.Fields{"ip": remoteIP}).Debug("Checking if update is permitted from IP")
-	for _, v := range a.AllowFrom.ValidEntries() {
+	remoteIP := net.ParseIP(ip)
+	log.WithFields(log.Fields{"ip": remoteIP}).Debug("Checking if access is permitted from IP")
+	for _, v := range valid {
 		_, vnet, _ := net.ParseCIDR(v)
 		if vnet.Contains(remoteIP) {
 			return true
@@ -70,17 +72,27 @@ func (a ACMETxt) AllowedFrom(ip string) bool {
 	return false
 }
 
-// AllowedFromList checks if any IP in the list is within the allowed ranges
-func (a ACMETxt) AllowedFromList(ips []string) bool {
+// AllowsAny checks if any IP in the list is within the allowed ranges
+func (c *CIDRSlice) AllowsAny(ips []string) bool {
 	if len(ips) == 0 {
-		return a.AllowedFrom("")
+		return c.Allows("")
 	}
 	for _, v := range ips {
-		if a.AllowedFrom(v) {
+		if c.Allows(v) {
 			return true
 		}
 	}
 	return false
+}
+
+// AllowedFrom checks if an IP address is within the allowed ranges
+func (a ACMETxt) AllowedFrom(ip string) bool {
+	return a.AllowFrom.Allows(ip)
+}
+
+// AllowedFromList checks if any IP in the list is within the allowed ranges
+func (a ACMETxt) AllowedFromList(ips []string) bool {
+	return a.AllowFrom.AllowsAny(ips)
 }
 
 // NewACMETxt creates a new ACMETxt with a random password and UUID
@@ -91,4 +103,49 @@ func NewACMETxt() ACMETxt {
 	a.Password = password
 	a.Subdomain = uuid.New().String()
 	return a
+}
+
+// TXTRecord is one of the rolling TXT values stored for a subdomain
+type TXTRecord struct {
+	Value string
+	// LastUpdate is the unix timestamp of the last update, 0 if the value was never set
+	LastUpdate int64
+}
+
+// DomainInfo is the administrative view of a registered subdomain
+type DomainInfo struct {
+	Username  uuid.UUID
+	Subdomain string
+	AllowFrom CIDRSlice
+	TXT       []TXTRecord
+}
+
+// LastUpdate returns the unix timestamp of the most recent TXT update, 0 if the domain was never updated
+func (d DomainInfo) LastUpdate() int64 {
+	var last int64
+	for _, t := range d.TXT {
+		if t.LastUpdate > last {
+			last = t.LastUpdate
+		}
+	}
+	return last
+}
+
+// HasTXT reports whether at least one non-empty TXT value is stored for the domain
+func (d DomainInfo) HasTXT() bool {
+	for _, t := range d.TXT {
+		if t.Value != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// DomainActivity is a compact per-subdomain summary used for reporting
+type DomainActivity struct {
+	Subdomain string
+	// LastUpdate is the unix timestamp of the most recent TXT update, 0 if never updated
+	LastUpdate int64
+	// HasTXT reports whether at least one non-empty TXT value is stored
+	HasTXT bool
 }

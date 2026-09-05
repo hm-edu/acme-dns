@@ -94,3 +94,75 @@ func TestGetIPListFromHeader(t *testing.T) {
 		}
 	}
 }
+
+func TestAdminConfigValidate(t *testing.T) {
+	longKey := "0123456789abcdef0123456789abcdef"
+	for i, test := range []struct {
+		cfg     AdminConfig
+		wantErr bool
+	}{
+		{AdminConfig{Enabled: false}, false},
+		{AdminConfig{Enabled: false, APIKey: "short"}, false},
+		{AdminConfig{Enabled: true}, true},
+		{AdminConfig{Enabled: true, APIKey: "short"}, true},
+		{AdminConfig{Enabled: true, APIKey: longKey}, false},
+		{AdminConfig{Enabled: true, APIKey: longKey, AllowFrom: CIDRSlice{"127.0.0.1/32", "[::1]/128"}}, false},
+		{AdminConfig{Enabled: true, APIKey: longKey, AllowFrom: CIDRSlice{"127.0.0.1"}}, true},
+		{AdminConfig{Enabled: true, APIKey: longKey, AllowFrom: CIDRSlice{"invalid"}}, true},
+	} {
+		err := test.cfg.Validate()
+		if (err != nil) != test.wantErr {
+			t.Errorf("Test %d: expected error=%v, got [%v]", i, test.wantErr, err)
+		}
+	}
+}
+
+func TestPrepareConfigAdmin(t *testing.T) {
+	base := DNSConfig{Database: DatabaseSettings{Engine: "sqlite3", Connection: ":memory:"}}
+
+	if _, err := PrepareConfig(base); err != nil {
+		t.Errorf("Expected no error for config without admin section, got [%v]", err)
+	}
+
+	bad := base
+	bad.Admin = AdminConfig{Enabled: true, APIKey: "tooshort"}
+	if _, err := PrepareConfig(bad); err == nil {
+		t.Errorf("Expected error for enabled admin API with short key, got none")
+	}
+
+	good := base
+	good.Admin = AdminConfig{Enabled: true, APIKey: "0123456789abcdef0123456789abcdef", AllowFrom: CIDRSlice{"10.0.0.0/8"}}
+	if _, err := PrepareConfig(good); err != nil {
+		t.Errorf("Expected no error for valid admin config, got [%v]", err)
+	}
+}
+
+func TestCIDRSliceAllows(t *testing.T) {
+	empty := CIDRSlice{}
+	if !empty.Allows("1.2.3.4") || !empty.AllowsAny([]string{}) || !empty.AllowsAny([]string{"whatever"}) {
+		t.Errorf("Empty allowlist must allow everything")
+	}
+	onlyInvalid := CIDRSlice{"invalid", "1.2.3.4"}
+	if !onlyInvalid.Allows("9.9.9.9") {
+		t.Errorf("Allowlist with only invalid entries must allow everything")
+	}
+	acl := CIDRSlice{"192.168.1.0/24", "[2001:db8::]/32", "invalid"}
+	for i, test := range []struct {
+		ips      []string
+		expected bool
+	}{
+		{[]string{"192.168.1.1"}, true},
+		{[]string{"192.168.2.1"}, false},
+		{[]string{"2001:db8:1::1"}, true},
+		{[]string{"2001:db9::1"}, false},
+		{[]string{"10.0.0.1", "192.168.1.200"}, true},
+		{[]string{"10.0.0.1", "10.0.0.2"}, false},
+		{[]string{}, false},
+		{[]string{""}, false},
+		{[]string{"not an ip"}, false},
+	} {
+		if got := acl.AllowsAny(test.ips); got != test.expected {
+			t.Errorf("Test %d: AllowsAny(%v) = %v, expected %v", i, test.ips, got, test.expected)
+		}
+	}
+}
