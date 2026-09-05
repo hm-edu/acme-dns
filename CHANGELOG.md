@@ -1,4 +1,11 @@
 # Changelog
+- Unreleased:
+  - New
+    - Admin API to list registered domains, inspect their details, set TXT values, delete domains and gather usage statistics (`/admin/domains`, `/admin/domains/<subdomain>`, `/admin/domains/<subdomain>/txt`, `/admin/report`). Protected by an API key and an optional source IP allowlist, see the `[admin]` configuration section.
+  - Changed
+    - Migrated the DNS server from `github.com/miekg/dns` to its successor `codeberg.org/miekg/dns`.
+    - Responses to EDNS0 queries now advertise a UDP payload size of 1232 bytes instead of 512.
+    - Requires Go 1.27.
 - v0.10:
   - Switched to go 1.20
 - v0.9.1:

@@ -21,6 +21,7 @@ For longer explanation of the underlying issue and other proposed solutions, see
 - Custom records (have your required A, AAAA, NS, etc. records served)
 - HTTP API automatically acquires and uses Let's Encrypt TLS certificate
 - Limit /update API endpoint access to specific CIDR mask(s), defined in the /register request
+- Optional admin API to list, inspect, update and delete registered domains and to gather usage statistics, protected by an API key and an optional source IP allowlist. Suited for integrating acme-dns with a central ACME proxy.
 - Supports SQLite & PostgreSQL as DB backends
 - Rolling update of two TXT records to be able to answer to challenges for certificates that have both names: `yourdomain.tld` and `*.yourdomain.tld`, as both of the challenges point to the same subdomain.
 - Simple deployment (it's Go after all)
@@ -107,6 +108,134 @@ The method allows you to update the TXT answer contents of your unique subdomain
 The method can be used to check readiness and/or liveness of the server. It will return status code 200 on success or won't be reachable.
 
 `GET /health`
+
+## Admin API
+
+The admin API lets operators (or a central ACME proxy) list, inspect, update and delete registered domains without knowing the per-domain credentials. It is disabled by default and has to be enabled in the `[admin]` section of the configuration. All admin endpoints are served by the same HTTP(S) listener as the regular API.
+
+| Method | Path                              | Description                                         |
+| ------ | --------------------------------- | --------------------------------------------------- |
+| GET    | `/admin/domains`                  | List registered domains (paginated)                 |
+| GET    | `/admin/domains/<subdomain>`      | Details of one domain                               |
+| POST   | `/admin/domains/<subdomain>/txt`  | Set a TXT value (rolling update like `/update`)     |
+| DELETE | `/admin/domains/<subdomain>`      | Delete a domain including its TXT records           |
+| GET    | `/admin/report`                   | Usage statistics                                    |
+
+### Authentication
+
+Every request needs the configured `api_key`, which has to be at least 32 characters long. It can be sent in one of two ways:
+
+| Header name   | Example                                                  |
+| ------------- | -------------------------------------------------------- |
+| X-Admin-Key   | `X-Admin-Key: 4a7d1ed414474e4033ac29ccb8653d9b...`       |
+| Authorization | `Authorization: Bearer 4a7d1ed414474e4033ac29ccb8653d9b...` |
+
+Optionally, `allow_from` restricts access to a list of CIDR ranges. Requests from other addresses are rejected with `403 Forbidden` before the API key is checked. The client address is taken from the connection, or from the header configured with `use_header` / `header_name` in the `[api]` section when acme-dns runs behind a reverse proxy. Only enable `use_header` if the proxy overwrites that header, otherwise clients can spoof their address.
+
+A missing or wrong API key results in `401 Unauthorized`.
+
+### List domains
+
+`GET /admin/domains?limit=100&offset=0`
+
+Returns registered subdomains ordered by subdomain. `limit` defaults to 100 and is capped at 1000, `offset` defaults to 0. Password hashes are never returned.
+
+`Status: 200 OK`
+
+```json
+{
+  "total": 2,
+  "limit": 100,
+  "offset": 0,
+  "domains": [
+    {
+      "username": "c36f50e8-4632-44f0-83fe-e070fef28a10",
+      "subdomain": "8e5700ea-a4bf-41c7-8a77-e990661dcc6a",
+      "fulldomain": "8e5700ea-a4bf-41c7-8a77-e990661dcc6a.auth.example.org",
+      "allowfrom": ["192.168.100.1/24"],
+      "txt_records": [
+        { "txt": "___validation_token_received_from_the_ca___", "last_update": "2026-09-05T10:12:42Z" },
+        { "txt": "", "last_update": null }
+      ],
+      "has_txt": true,
+      "last_update": "2026-09-05T10:12:42Z"
+    }
+  ]
+}
+```
+
+### Domain details
+
+`GET /admin/domains/<subdomain>`
+
+Returns the same object as a list entry for a single subdomain. Unknown subdomains result in `404 Not Found`, syntactically invalid ones in `400 Bad Request`.
+
+### Set TXT value
+
+`POST /admin/domains/<subdomain>/txt`
+
+Sets the TXT value of a domain without the per-domain credentials. Like `/update` this performs a rolling update of the two stored TXT values, so two consecutive calls (for example for `example.org` and `*.example.org`) result in both values being served. The value has to be exactly 43 characters long.
+
+#### Example input
+
+```json
+{
+  "txt": "___validation_token_received_from_the_ca___"
+}
+```
+
+`Status: 200 OK`
+
+The response is the domain object as returned by the details endpoint, including the updated `txt_records`. Unknown subdomains result in `404 Not Found`, an invalid value in `400 Bad Request` with error `bad_txt`.
+
+### Delete domain
+
+`DELETE /admin/domains/<subdomain>`
+
+Removes the registration and its TXT records. The credentials of the domain stop working immediately.
+
+`Status: 204 No Content`
+
+Unknown subdomains result in `404 Not Found`.
+
+### Report
+
+`GET /admin/report`
+
+Returns aggregated usage statistics and the ten most recently updated domains. `stale` counts domains that have been updated at some point, but not within the last 90 days.
+
+`Status: 200 OK`
+
+```json
+{
+  "generated_at": "2026-09-05T10:15:00Z",
+  "domain": "auth.example.org",
+  "database_engine": "sqlite3",
+  "domains": {
+    "total": 120,
+    "with_txt": 98,
+    "never_updated": 22,
+    "updated_last_24h": 5,
+    "updated_last_7d": 31,
+    "updated_last_30d": 80,
+    "updated_last_90d": 95,
+    "stale": 3
+  },
+  "recently_updated": [
+    {
+      "subdomain": "8e5700ea-a4bf-41c7-8a77-e990661dcc6a",
+      "fulldomain": "8e5700ea-a4bf-41c7-8a77-e990661dcc6a.auth.example.org",
+      "last_update": "2026-09-05T10:12:42Z"
+    }
+  ]
+}
+```
+
+Example:
+
+```bash
+$ curl -H "X-Admin-Key: $ACME_DNS_ADMIN_KEY" https://auth.example.org/admin/report
+```
 
 ## Self-hosted
 
@@ -269,6 +398,19 @@ corsorigins = [
 use_header = false
 # header name to pull the ip address / list of ip addresses from
 header_name = "X-Forwarded-For"
+
+[admin]
+# enable the admin API (/admin/domains, /admin/domains/<subdomain>, /admin/domains/<subdomain>/txt, /admin/report)
+enabled = false
+# shared secret for the admin API, at least 32 characters, e.g. generated with: openssl rand -hex 32
+# send it in the "X-Admin-Key" header or as bearer token in the "Authorization" header
+api_key = ""
+# optional list of CIDR ranges that may access the admin API, an empty list allows all source addresses
+# the client address is taken from the connection, or from the header configured in the [api] section if use_header = true
+allow_from = [
+    "127.0.0.1/32",
+    "::1/128",
+]
 
 [logconfig]
 # logging level: "error", "warning", "info" or "debug"

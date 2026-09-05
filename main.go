@@ -109,9 +109,13 @@ func startHTTPAPI(errChan chan error, cfg *acmedns.DNSConfig, db acmedns.Databas
 	legolog.SetDefault(slog.New(slog.NewTextHandler(logwriter, nil)))
 
 	router := httprouter.New()
+	allowedMethods := []string{"GET", "POST"}
+	if cfg.Admin.Enabled {
+		allowedMethods = append(allowedMethods, "DELETE")
+	}
 	c := cors.New(cors.Options{
 		AllowedOrigins:     cfg.API.CorsOrigins,
-		AllowedMethods:     []string{"GET", "POST"},
+		AllowedMethods:     allowedMethods,
 		OptionsPassthrough: false,
 		Debug:              cfg.General.Debug,
 	})
@@ -126,6 +130,14 @@ func startHTTPAPI(errChan chan error, cfg *acmedns.DNSConfig, db acmedns.Databas
 	}
 	router.POST("/update", a.Auth(a.UpdatePost))
 	router.GET("/health", httpapi.HealthCheck)
+	if cfg.Admin.Enabled {
+		router.GET("/admin/domains", a.AdminAuth(a.AdminListDomains))
+		router.GET("/admin/domains/:subdomain", a.AdminAuth(a.AdminGetDomain))
+		router.GET("/admin/report", a.AdminAuth(a.AdminReport))
+		router.DELETE("/admin/domains/:subdomain", a.AdminAuth(a.AdminDeleteDomain))
+		router.POST("/admin/domains/:subdomain/txt", a.AdminAuth(a.AdminSetTXT))
+		log.WithFields(log.Fields{"allow_from": cfg.Admin.AllowFrom.ValidEntries()}).Info("Admin API enabled")
+	}
 
 	host := cfg.API.IP + ":" + cfg.API.Port
 
