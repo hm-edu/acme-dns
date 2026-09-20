@@ -3,7 +3,7 @@ module github.com/hm-edu/acme-dns
 go 1.27.0
 
 require (
-	codeberg.org/miekg/dns v0.6.109
+	codeberg.org/miekg/dns v0.6.110
 	github.com/BurntSushi/toml v1.6.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caddyserver/certmagic v0.25.4
