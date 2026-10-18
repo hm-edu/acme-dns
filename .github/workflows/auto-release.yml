@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # scheduled/manual runs always; PR runs only for merged security PRs
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'security'))
+    uses: hm-edu/.github/.github/workflows/auto-release.yml@main
+    secrets:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_KEY: ${{ secrets.RELEASE_APP_KEY }}
