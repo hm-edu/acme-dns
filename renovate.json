@@ -1,13 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended"
-  ],
-  "packageRules": [
-    {
-      "description": "Automerge non-major updates",
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "automerge": true
-    }
-  ]
+  "extends": ["github>hm-edu/renovate-config:go"]
 }
