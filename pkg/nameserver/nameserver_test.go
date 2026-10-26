@@ -203,10 +203,8 @@ func TestEDNSA(t *testing.T) {
 func TestEDNSBADVERS(t *testing.T) {
 	msg := dns.NewMsg("auth.example.org", dns.TypeA)
 	msg.ID = dns.ID()
-	// Pack does not honour msg.Version, so add a raw OPT RR with version 1 to the additional section.
-	o := &dns.OPT{Hdr: dns.Header{Name: "."}}
-	o.SetVersion(1)
-	msg.Extra = append(msg.Extra, o)
+	msg.UDPSize = 1232
+	msg.Version = 1
 	in, err := dns.Exchange(context.Background(), msg, "udp", "127.0.0.1:15353")
 	if err != nil {
 		t.Fatalf("Error querying the server [%v]", err)
