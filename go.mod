@@ -3,7 +3,7 @@ module github.com/hm-edu/acme-dns
 go 1.27.0
 
 require (
-	codeberg.org/miekg/dns v0.6.136
+	codeberg.org/miekg/dns v0.6.138
 	github.com/BurntSushi/toml v1.6.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/caddyserver/certmagic v0.25.6
@@ -55,7 +55,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	gopkg.in/fsnotify.v1 v1.4.7 // indirect
