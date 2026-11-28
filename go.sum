@@ -1,7 +1,7 @@
 code.pfad.fr/check v1.1.0 h1:GWvjdzhSEgHvEHe2uJujDcpmZoySKuHQNrZMfzfO0bE=
 code.pfad.fr/check v1.1.0/go.mod h1:NiUH13DtYsb7xp5wll0U4SXx7KhXQVCtRgdC96IPfoM=
-codeberg.org/miekg/dns v0.6.139 h1:27ljCTNElaKmROWyl7F6bj2g8y++SYzvg2qbKcriyOQ=
-codeberg.org/miekg/dns v0.6.139/go.mod h1:GZQYwBsgLFxE+NImBtNZH/eph/CHD8oHuFVGOLHuaos=
+codeberg.org/miekg/dns v0.6.152 h1:C7tF+ObKHttCNDWQfKoek5wVWDIQVduVkvqW/nK+maI=
+codeberg.org/miekg/dns v0.6.152/go.mod h1:GZQYwBsgLFxE+NImBtNZH/eph/CHD8oHuFVGOLHuaos=
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7OputlJIzU=
